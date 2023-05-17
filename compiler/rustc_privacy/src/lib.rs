@@ -44,7 +44,7 @@ use std::{fmt, mem};
 use errors::{
     FieldIsPrivate, FieldIsPrivateLabel, FromPrivateDependencyInPublicInterface, InPublicInterface,
     InPublicInterfaceTraits, ItemIsPrivate, PrivateInPublicLint, ReportEffectiveVisibility,
-    UnnamedItemIsPrivate, UnnameableTypesLint, PrivateInterfacesLint
+    UnnamedItemIsPrivate, UnnameableTypesLint, PrivateInterfacesLint, PrivateBoundsLint
 };
 
 fluent_messages! { "../messages.ftl" }
@@ -1813,6 +1813,12 @@ impl<'a, 'tcx> Visitor<'tcx> for ObsoleteVisiblePrivateTypesVisitor<'a, 'tcx> {
     fn visit_expr(&mut self, _: &'tcx hir::Expr<'tcx>) {}
 }
 
+
+enum InterfaceType {
+    Primary,
+    Secondary
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 /// SearchInterfaceForPrivateItemsVisitor traverses an item's interface and
 /// finds any private components in it.
@@ -1820,17 +1826,18 @@ impl<'a, 'tcx> Visitor<'tcx> for ObsoleteVisiblePrivateTypesVisitor<'a, 'tcx> {
 /// and traits in public interfaces.
 ///////////////////////////////////////////////////////////////////////////////
 
-struct SearchInterfaceForPrivateItemsVisitor<'tcx, 'a, 'b> {
+struct SearchInterfaceForPrivateItemsVisitor<'tcx> {
     tcx: TyCtxt<'tcx>,
     item_def_id: LocalDefId,
     /// The visitor checks that each component type is at least this visible.
     item_ev: Option<EffectiveVisibility>,
-    checker: & 'a PrivateItemsInPublicInterfacesChecker<'tcx, 'b>,
     in_assoc_ty: bool,
+    interface_type: InterfaceType,
 }
 
-impl SearchInterfaceForPrivateItemsVisitor<'_, '_, '_> {
+impl SearchInterfaceForPrivateItemsVisitor<'_> {
     fn generics(&mut self) -> &mut Self {
+        self.interface_type = InterfaceType::Primary;
         for param in &self.tcx.generics_of(self.item_def_id).params {
             match param.kind {
                 GenericParamDefKind::Lifetime => {}
@@ -1849,6 +1856,7 @@ impl SearchInterfaceForPrivateItemsVisitor<'_, '_, '_> {
     }
 
     fn predicates(&mut self) -> &mut Self {
+        self.interface_type = InterfaceType::Secondary;
         // N.B., we use `explicit_predicates_of` and not `predicates_of`
         // because we don't want to report privacy errors due to where
         // clauses that the compiler inferred. We only want to
@@ -1860,6 +1868,7 @@ impl SearchInterfaceForPrivateItemsVisitor<'_, '_, '_> {
     }
 
     fn bounds(&mut self) -> &mut Self {
+        self.interface_type = InterfaceType::Secondary;
         self.visit_predicates(ty::GenericPredicates {
             parent: None,
             predicates: self.tcx.explicit_item_bounds(self.item_def_id).skip_binder(),
@@ -1868,6 +1877,7 @@ impl SearchInterfaceForPrivateItemsVisitor<'_, '_, '_> {
     }
 
     fn ty(&mut self) -> &mut Self {
+        self.interface_type = InterfaceType::Primary;
         self.visit(self.tcx.type_of(self.item_def_id).subst_identity());
         self
     }
@@ -1877,21 +1887,41 @@ impl SearchInterfaceForPrivateItemsVisitor<'_, '_, '_> {
             return false;
         };
 
+        let Some(item_ev) = self.item_ev else {
+            return false;
+        };
+
         let nominal_vis = self.tcx.local_visibility(local_def_id);
         for l in [Level::Reexported, Level::Reachable] {
-            if let Some(item_ev) = self.item_ev {
-                let item_ev_at_level = *item_ev.at_level(l);
+            let item_ev_at_level = *item_ev.at_level(l);
 
-                if (item_ev_at_level != nominal_vis) && item_ev_at_level.is_at_least(nominal_vis, self.tcx) {
-                    self.tcx.emit_spanned_lint(
-                        lint::builtin::PRIVATE_INTERFACES, 
-                        self.tcx.hir().local_def_id_to_hir_id(local_def_id),
-                        self.tcx.def_span(def_id), 
-                        PrivateInterfacesLint {
-                            kind,
-                            descr: descr.into(),
-                        }
-                    );
+            if (item_ev_at_level != nominal_vis) && item_ev_at_level.is_at_least(nominal_vis, self.tcx) {
+                match self.interface_type {
+                    InterfaceType::Primary => {
+                        self.tcx.emit_spanned_lint(
+                            lint::builtin::PRIVATE_INTERFACES, 
+                            self.tcx.hir().local_def_id_to_hir_id(local_def_id),
+                            self.tcx.def_span(def_id), 
+                            PrivateInterfacesLint {
+                                kind,
+                                descr: descr.into(),
+                                span: self.tcx.def_span(self.item_def_id)
+                            }
+                        );
+                    }
+
+                    InterfaceType::Secondary => {
+                        self.tcx.emit_spanned_lint(
+                            lint::builtin::PRIVATE_BOUNDS, 
+                            self.tcx.hir().local_def_id_to_hir_id(local_def_id),
+                            self.tcx.def_span(def_id),
+                            PrivateBoundsLint {
+                                kind,
+                                descr: descr.into(),
+                                span: self.tcx.def_span(self.item_def_id)
+                            }
+                        );
+                    }
                 }
             }
         }
@@ -1900,7 +1930,7 @@ impl SearchInterfaceForPrivateItemsVisitor<'_, '_, '_> {
     }
 }
 
-impl<'tcx> DefIdVisitor<'tcx> for SearchInterfaceForPrivateItemsVisitor<'tcx, '_, '_> {
+impl<'tcx> DefIdVisitor<'tcx> for SearchInterfaceForPrivateItemsVisitor<'tcx> {
     fn tcx(&self) -> TyCtxt<'tcx> {
         self.tcx
     }
@@ -1932,12 +1962,12 @@ impl<'tcx, 'a> PrivateItemsInPublicInterfacesChecker<'tcx, 'a> {
         &self,
         def_id: LocalDefId,
         item_ev: Option<EffectiveVisibility>,
-    ) -> SearchInterfaceForPrivateItemsVisitor<'tcx, '_, '_> {
+    ) -> SearchInterfaceForPrivateItemsVisitor<'tcx> {
         SearchInterfaceForPrivateItemsVisitor {
             tcx: self.tcx,
             item_def_id: def_id,
             item_ev,
-            checker: self,
+            interface_type: InterfaceType::Primary,
             in_assoc_ty: false,
         }
     }

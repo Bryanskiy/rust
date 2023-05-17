@@ -111,5 +111,17 @@ pub struct UnnameableTypesLint<'a> {
 pub struct PrivateInterfacesLint<'a> {
     pub kind: &'a str,
     pub descr: DiagnosticArgFromDisplay<'a>,
+    #[label(privacy_visibility_label)]
+    pub span: Span,
 }
+
+#[derive(LintDiagnostic)]
+#[diag(privacy_private_bounds_lint)]
+pub struct PrivateBoundsLint<'a> {
+    pub kind: &'a str,
+    pub descr: DiagnosticArgFromDisplay<'a>,
+    #[label(privacy_visibility_label)]
+    pub span: Span,
+}
+
 

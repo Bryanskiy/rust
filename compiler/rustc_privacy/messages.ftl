@@ -23,4 +23,9 @@ privacy_private_in_public_lint =
     })
 
 privacy_unnameable_types_lint = {$kind} `{$descr}`
-privacy_private_interfaces_lint = {$kind} `{$descr}`
+
+privacy_private_interfaces_lint = private {$kind} `{$descr}` in public interface
+    .visibility_label = can't leak {$kind}
+
+privacy_private_bounds_lint = private {$kind} `{$descr}` in public interface
+    .visibility_label = can't leak {$kind}
