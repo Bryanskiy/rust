@@ -98,3 +98,18 @@ pub struct PrivateInPublicLint<'a> {
     pub kind: &'a str,
     pub descr: DiagnosticArgFromDisplay<'a>,
 }
+
+#[derive(LintDiagnostic)]
+#[diag(privacy_unnameable_types_lint)]
+pub struct UnnameableTypesLint<'a> {
+    pub kind: &'a str,
+    pub descr: DiagnosticArgFromDisplay<'a>,
+}
+
+#[derive(LintDiagnostic)]
+#[diag(privacy_private_interfaces_lint)]
+pub struct PrivateInterfacesLint<'a> {
+    pub kind: &'a str,
+    pub descr: DiagnosticArgFromDisplay<'a>,
+}
+

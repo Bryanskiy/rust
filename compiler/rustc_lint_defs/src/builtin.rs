@@ -4175,3 +4175,21 @@ declare_lint! {
     Warn,
     "\"invalid_parameter\" isn't a valid argument for `#[macro_export]`",
 }
+
+declare_lint!{
+    pub PRIVATE_INTERFACES,
+    Warn,
+    "some text",
+}
+
+declare_lint!{
+    pub PRIVATE_BOUNDS,
+    Warn,
+    "some text",
+}
+
+declare_lint!{
+    pub UNNAMEABLE_TYPES,
+    Allow,
+    "some text",
+}

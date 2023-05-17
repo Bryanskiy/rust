@@ -308,6 +308,13 @@ fn register_builtins(store: &mut LintStore) {
         MAP_UNIT_FN
     );
 
+    add_lint_group!(
+        "private_in_public",
+        PRIVATE_INTERFACES,
+        PRIVATE_BOUNDS,
+        UNNAMEABLE_TYPES
+    );
+
     add_lint_group!("let_underscore", LET_UNDERSCORE_DROP, LET_UNDERSCORE_LOCK);
 
     add_lint_group!(

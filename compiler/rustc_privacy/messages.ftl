@@ -21,3 +21,6 @@ privacy_private_in_public_lint =
         [trait] E0445
         *[other] E0446
     })
+
+privacy_unnameable_types_lint = {$kind} `{$descr}`
+privacy_private_interfaces_lint = {$kind} `{$descr}`
