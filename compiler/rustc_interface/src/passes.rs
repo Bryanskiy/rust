@@ -850,6 +850,9 @@ fn analysis(tcx: TyCtxt<'_>, (): ()) -> Result<()> {
                                 rustc_lint::BuiltinCombinedLateLintPass::new()
                             });
                         });
+                    },
+                    {
+                        tcx.ensure().check_delegation(());
                     }
                 );
             },

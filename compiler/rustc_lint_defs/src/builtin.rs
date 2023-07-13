@@ -3330,6 +3330,9 @@ declare_lint_pass! {
         CONST_EVALUATABLE_UNCHECKED,
         CONST_ITEM_MUTATION,
         DEAD_CODE,
+        DELEGATION_PATTERN,
+        COMPRESSED_DELEGATION_PATTERN,
+        DELEGATED_METHODS,
         DEPRECATED,
         DEPRECATED_CFG_ATTR_CRATE_TYPE_NAME,
         DEPRECATED_IN_FUTURE,
@@ -4352,4 +4355,22 @@ declare_lint! {
     Allow,
     "effective visibility of a type is larger than the area in which it can be named",
     @feature_gate = sym::type_privacy_lints;
+}
+
+declare_lint! {
+    pub DELEGATION_PATTERN,
+    Warn,
+    "search functions which calls another functions with same name",
+}
+
+declare_lint! {
+    pub COMPRESSED_DELEGATION_PATTERN,
+    Allow,
+    "compressed DELEGATION_PATTERN"
+}
+
+declare_lint!{
+    pub DELEGATED_METHODS,
+    Warn,
+    "search delegated methods stat"
 }

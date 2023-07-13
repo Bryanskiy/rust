@@ -28,6 +28,7 @@ mod diverges;
 mod errors;
 mod expectation;
 mod expr;
+mod delegation;
 // Used by clippy;
 pub mod expr_use_visitor;
 mod fallback;
@@ -454,6 +455,7 @@ fn has_expected_num_generic_args(tcx: TyCtxt<'_>, trait_did: DefId, expected: us
 
 pub fn provide(providers: &mut Providers) {
     method::provide(providers);
+    delegation::provide(providers); // lint
     *providers = Providers {
         typeck,
         diagnostic_only_typeck,

@@ -29,6 +29,18 @@ hir_typeck_convert_using_method = try using `{$sugg}` to convert `{$found}` to `
 
 hir_typeck_ctor_is_private = tuple struct constructor `{$def}` is private
 
+hir_typeck_delegation_pattern =
+    dstats. stmts: {$stmts}, args_match: {$args_match}, ret_match: {$ret_match}, self_arg: {$self_arg}, same_name: {$same_name}, has_expr_after: {$has_expr_after}.
+    .caller_label = caller
+    .callee_label = callee
+
+hir_typeck_compressed_delegation_pattern =
+    comressed dstats. args_match: {$args_match}, ret_match: {$ret_match}, self_arg: {$self_arg}, has_expr_after: {$has_expr_after}.
+    .callee_label = callee
+
+hir_typeck_delegation_methods_stat =
+    delegation methods stats. methods_count: {$methods_count}, {$impls_count}.
+
 hir_typeck_expected_default_return_type = expected `()` because of default return type
 
 hir_typeck_expected_return_type = expected `{$expected}` because of return type

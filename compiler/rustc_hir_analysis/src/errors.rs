@@ -5,7 +5,7 @@ use rustc_errors::{
     error_code, Applicability, DiagnosticBuilder, ErrorGuaranteed, Handler, IntoDiagnostic,
     MultiSpan,
 };
-use rustc_macros::{Diagnostic, Subdiagnostic};
+use rustc_macros::{Diagnostic, LintDiagnostic, Subdiagnostic};
 use rustc_middle::ty::{self, print::TraitRefPrintOnlyTraitPath, Ty};
 use rustc_span::{symbol::Ident, Span, Symbol};
 
