@@ -1,3 +1,5 @@
+#![allow(unnameable_types)]
+
 use std::borrow::Cow;
 use std::ffi::CString;
 use std::path::Path;

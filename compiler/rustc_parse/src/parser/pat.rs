@@ -23,6 +23,8 @@ use rustc_span::source_map::{respan, Span, Spanned};
 use rustc_span::symbol::{kw, sym, Ident};
 use thin_vec::{thin_vec, ThinVec};
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(parser)`
 #[derive(PartialEq, Copy, Clone)]
 pub enum Expected {
     ParameterName,

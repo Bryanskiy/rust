@@ -10,6 +10,8 @@ use super::{alloc_range, AllocError, AllocId, AllocRange, AllocResult, Provenanc
 use rustc_serialize::{Decodable, Decoder, Encodable, Encoder};
 
 /// Stores the provenance information of pointers stored in memory.
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(allocation)`
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 #[derive(HashStable)]
 pub struct ProvenanceMap<Prov = AllocId> {
@@ -193,6 +195,8 @@ impl<Prov: Provenance> ProvenanceMap<Prov> {
 /// A partial, owned list of provenance to transfer into another allocation.
 ///
 /// Offsets are already adjusted to the destination allocation.
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(allocation)`
 pub struct ProvenanceCopy<Prov> {
     dest_ptrs: Option<Box<[(Size, Prov)]>>,
     dest_bytes: Option<Box<[(Size, Prov)]>>,

@@ -2,6 +2,8 @@ use std::iter::Peekable;
 use std::mem;
 use std::ops::Deref;
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(state)`
 pub struct Delimited<I: Iterator> {
     is_first: bool,
     iter: Peekable<I>,
@@ -15,6 +17,8 @@ pub trait IterDelimited: Iterator + Sized {
 
 impl<I: Iterator> IterDelimited for I {}
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(state)`
 pub struct IteratorItem<T> {
     value: T,
     pub is_first: bool,
@@ -22,6 +26,8 @@ pub struct IteratorItem<T> {
 }
 
 impl<I: Iterator> Iterator for Delimited<I> {
+    #[cfg_attr(bootstrap, allow(unnameable_types))]
+    //~^ reachable at visibility `pub`, but can only be named at visibility `pub(state)`
     type Item = IteratorItem<I::Item>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -33,6 +39,8 @@ impl<I: Iterator> Iterator for Delimited<I> {
 }
 
 impl<T> Deref for IteratorItem<T> {
+    #[cfg_attr(bootstrap, allow(unnameable_types))]
+    //~^ reachable at visibility `pub`, but can only be named at visibility `pub(state)`
     type Target = T;
 
     fn deref(&self) -> &Self::Target {

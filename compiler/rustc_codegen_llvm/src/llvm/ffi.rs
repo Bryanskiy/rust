@@ -676,6 +676,8 @@ extern "C" {
 }
 #[repr(C)]
 pub struct RustArchiveMember<'a>(InvariantOpaque<'a>);
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(llvm_)`
 #[repr(C)]
 pub struct OperandBundleDef<'a>(InvariantOpaque<'a>);
 #[repr(C)]

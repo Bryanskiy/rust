@@ -53,6 +53,8 @@ impl Into<rustc_errors::DiagnosticId> for TypeAnnotationNeeded {
 }
 
 /// Information about a constant or a type containing inference variables.
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 pub struct InferenceDiagnosticsData {
     pub name: String,
     pub span: Option<Span>,
@@ -61,11 +63,15 @@ pub struct InferenceDiagnosticsData {
 }
 
 /// Data on the parent definition where a generic argument was declared.
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 pub struct InferenceDiagnosticsParentData {
     prefix: &'static str,
     name: String,
 }
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 #[derive(Clone)]
 pub enum UnderspecifiedArgKind {
     Type { prefix: Cow<'static, str> },

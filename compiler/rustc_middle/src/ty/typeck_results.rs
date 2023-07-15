@@ -569,6 +569,8 @@ fn invalid_hir_id_for_typeck_results(hir_owner: OwnerId, hir_id: hir::HirId) {
     });
 }
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(ty)`
 pub struct LocalTableInContext<'a, V> {
     hir_owner: OwnerId,
     data: &'a ItemLocalMap<V>,
@@ -598,6 +600,8 @@ impl<'a, V> LocalTableInContext<'a, V> {
 }
 
 impl<'a, V> ::std::ops::Index<hir::HirId> for LocalTableInContext<'a, V> {
+    #[cfg_attr(bootstrap, allow(unnameable_types))]
+    //~^ reachable at visibility `pub`, but can only be named at visibility `pub(ty)`
     type Output = V;
 
     fn index(&self, key: hir::HirId) -> &V {
@@ -605,6 +609,8 @@ impl<'a, V> ::std::ops::Index<hir::HirId> for LocalTableInContext<'a, V> {
     }
 }
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(ty)`
 pub struct LocalTableInContextMut<'a, V> {
     hir_owner: OwnerId,
     data: &'a mut ItemLocalMap<V>,

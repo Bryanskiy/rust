@@ -32,6 +32,8 @@ macro_rules! lint_callback { ($cx:expr, $f:ident, $($args:expr),*) => ({
 
 /// Implements the AST traversal for early lint passes. `T` provides the
 /// `check_*` methods.
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 pub struct EarlyContextAndPass<'a, T: EarlyLintPass> {
     context: EarlyContext<'a>,
     pass: T,

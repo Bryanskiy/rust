@@ -410,6 +410,8 @@ impl From<char> for ScalarInt {
 }
 
 /// Error returned when a conversion from ScalarInt to char fails.
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(ty)`
 #[derive(Debug)]
 pub struct CharTryFromScalarInt;
 

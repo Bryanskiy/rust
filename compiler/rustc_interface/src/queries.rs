@@ -32,6 +32,8 @@ use std::sync::Arc;
 ///
 /// [`steal`]: Steal::steal
 /// [`compute`]: Self::compute
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 pub struct Query<T> {
     /// `None` means no value has been computed yet.
     result: RefCell<Option<Result<Steal<T>>>>,
@@ -50,9 +52,13 @@ impl<T> Query<T> {
     }
 }
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 pub struct QueryResult<'a, T>(RefMut<'a, Steal<T>>);
 
 impl<'a, T> std::ops::Deref for QueryResult<'a, T> {
+    #[cfg_attr(bootstrap, allow(unnameable_types))]
+    //~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
     type Target = RefMut<'a, Steal<T>>;
 
     fn deref(&self) -> &Self::Target {
@@ -321,6 +327,8 @@ impl<'tcx> Queries<'tcx> {
     }
 }
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 pub struct Linker {
     // compilation inputs
     sess: Lrc<Session>,

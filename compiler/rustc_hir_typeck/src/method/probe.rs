@@ -51,6 +51,8 @@ pub use self::PickKind::*;
 
 /// Boolean flag used to indicate if this search is for a suggestion
 /// or not. If true, we can allow ambiguity and so forth.
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 #[derive(Clone, Copy, Debug)]
 pub struct IsSuggestion(pub bool);
 
@@ -171,6 +173,8 @@ enum ProbeResult {
 /// T`, we could convert it to `*const T`, then autoref to `&*const T`. However, currently we do
 /// (at most) one of these. Either the receiver has type `T` and we convert it to `&T` (or with
 /// `mut`), or it has type `*mut T` and we convert it to `*const T`.
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum AutorefOrPtrAdjustment {
     /// Receiver has type `T`, add `&` or `&mut` (it `T` is `mut`), and maybe also "unsize" it.
@@ -195,6 +199,8 @@ impl AutorefOrPtrAdjustment {
     }
 }
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 #[derive(Debug, Clone)]
 pub struct Pick<'tcx> {
     pub item: ty::AssocItem,
@@ -216,6 +222,8 @@ pub struct Pick<'tcx> {
     unstable_candidates: Vec<(Candidate<'tcx>, Symbol)>,
 }
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PickKind<'tcx> {
     InherentImplPick,
@@ -229,6 +237,8 @@ pub enum PickKind<'tcx> {
 
 pub type PickResult<'tcx> = Result<Pick<'tcx>, MethodError<'tcx>>;
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 pub enum Mode {
     // An expression of the form `receiver.method_name(...)`.
@@ -241,6 +251,8 @@ pub enum Mode {
     Path,
 }
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 pub enum ProbeScope {
     // Assemble candidates coming only from traits in scope.

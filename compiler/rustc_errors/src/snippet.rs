@@ -2,12 +2,16 @@
 
 use crate::{Level, Loc};
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq)]
 pub struct Line {
     pub line_index: usize,
     pub annotations: Vec<Annotation>,
 }
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 #[derive(Clone, Copy, Debug, PartialOrd, Ord, PartialEq, Eq, Default)]
 pub struct AnnotationColumn {
     /// the (0-indexed) column for *display* purposes, counted in characters, not utf-8 bytes
@@ -100,6 +104,8 @@ impl MultilineAnnotation {
     }
 }
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq)]
 pub enum AnnotationType {
     /// Annotation under a single line of code
@@ -126,6 +132,8 @@ pub enum AnnotationType {
     MultilineLine(usize),
 }
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq)]
 pub struct Annotation {
     /// Start column.

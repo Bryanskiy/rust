@@ -330,6 +330,8 @@ impl<'a, 'tcx> AstConv<'tcx> for FnCtxt<'a, 'tcx> {
 ///
 /// This is a bridge between the interface of `AstConv`, which outputs a raw `Ty`,
 /// and the API in this module, which expect `Ty` to be fully normalized.
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 #[derive(Clone, Copy, Debug)]
 pub struct RawTy<'tcx> {
     pub raw: Ty<'tcx>,

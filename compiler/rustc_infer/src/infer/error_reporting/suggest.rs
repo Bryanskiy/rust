@@ -20,6 +20,8 @@ use crate::errors::{
 
 use super::TypeErrCtxt;
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(error_reporting)`
 #[derive(Clone, Copy)]
 pub enum SuggestAsRefKind {
     Option,

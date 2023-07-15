@@ -23,6 +23,8 @@ use crate::{
 
 use super::{find_use, RegionName, UseSpans};
 
+#[cfg_attr(bootstrap, allow(unnameable_types))]
+//~^ reachable at visibility `pub(crate)`, but can only be named at visibility `pub(diagnostics)`
 #[derive(Debug)]
 pub(crate) enum BorrowExplanation<'tcx> {
     UsedLater(LaterUseKind, Span, Option<Span>),
@@ -43,6 +45,8 @@ pub(crate) enum BorrowExplanation<'tcx> {
     Unexplained,
 }
 
+#[cfg_attr(bootstrap, allow(unnameable_types))]
+//~^ reachable at visibility `pub(crate)`, but can only be named at visibility `pub(diagnostics)`
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum LaterUseKind {
     TraitCapture,

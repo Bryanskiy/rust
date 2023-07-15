@@ -2247,6 +2247,8 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
     }
 }
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 pub enum TypeMismatchSource<'tcx> {
     /// Expected the binding to have the given type, but it was found to have
     /// a different type. Find out when that type first became incompatible.

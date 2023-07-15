@@ -98,6 +98,8 @@ struct InterpErrorInfoInner<'tcx> {
     backtrace: InterpErrorBacktrace,
 }
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(interpret)`
 #[derive(Debug)]
 pub struct InterpErrorBacktrace {
     backtrace: Option<Box<Backtrace>>,

@@ -107,6 +107,8 @@ fn delete_dirty_work_product(sess: &Session, swp: SerializedWorkProduct) {
 /// Either a result that has already be computed or a
 /// handle that will let us wait until it is computed
 /// by a background thread.
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(persist)`
 pub enum MaybeAsync<T> {
     Sync(T),
     Async(std::thread::JoinHandle<T>),

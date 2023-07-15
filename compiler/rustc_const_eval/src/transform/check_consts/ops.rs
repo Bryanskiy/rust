@@ -21,6 +21,8 @@ use rustc_trait_selection::traits::SelectionContext;
 use super::ConstCx;
 use crate::errors;
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(check_consts)`
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Status {
     Allowed,
@@ -28,6 +30,8 @@ pub enum Status {
     Forbidden,
 }
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(check_consts)`
 #[derive(Clone, Copy)]
 pub enum DiagnosticImportance {
     /// An operation that must be removed for const-checking to pass.
@@ -38,6 +42,8 @@ pub enum DiagnosticImportance {
 }
 
 /// An operation that is not *always* allowed in a const context.
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(check_consts)`
 pub trait NonConstOp<'tcx>: std::fmt::Debug {
     /// Returns an enum indicating whether this operation is allowed within the given item.
     fn status_in_item(&self, _ccx: &ConstCx<'_, 'tcx>) -> Status {

@@ -9,6 +9,8 @@ use rustc_middle::ty::{self, Binder, Region, Ty, TypeVisitable};
 use rustc_span::Span;
 
 /// Information about the anonymous region we are searching for.
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(nice_region_error)`
 #[derive(Debug)]
 pub struct AnonymousParamInfo<'tcx> {
     /// The parameter corresponding to the anonymous region.

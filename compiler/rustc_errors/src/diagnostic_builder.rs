@@ -296,6 +296,8 @@ impl EmissionGuarantee for Noted {
 
 /// Marker type which enables implementation of `create_bug` and `emit_bug` functions for
 /// bug struct diagnostics.
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 #[derive(Copy, Clone)]
 pub struct Bug;
 

@@ -193,11 +193,15 @@ fn shallow_lint_levels_on(tcx: TyCtxt<'_>, owner: hir::OwnerId) -> ShallowLintLe
     specs
 }
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 pub struct TopDown {
     sets: LintLevelSets,
     cur: LintStackIndex,
 }
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 pub trait LintLevelsProvider {
     fn current_specs(&self) -> &FxHashMap<LintId, LevelAndSource>;
     fn insert(&mut self, id: LintId, lvl: LevelAndSource);
@@ -294,6 +298,8 @@ impl<'tcx> LintLevelsBuilder<'_, LintLevelQueryMap<'tcx>> {
 }
 
 impl<'tcx> Visitor<'tcx> for LintLevelsBuilder<'_, LintLevelQueryMap<'tcx>> {
+    #[cfg_attr(bootstrap, allow(unnameable_types))]
+    //~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
     type NestedFilter = nested_filter::OnlyBodies;
 
     fn nested_visit_map(&mut self) -> Self::Map {
@@ -368,6 +374,8 @@ impl<'tcx> LintLevelsBuilder<'_, QueryMapExpectationsWrapper<'tcx>> {
 }
 
 impl<'tcx> Visitor<'tcx> for LintLevelsBuilder<'_, QueryMapExpectationsWrapper<'tcx>> {
+    #[cfg_attr(bootstrap, allow(unnameable_types))]
+    //~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
     type NestedFilter = nested_filter::All;
 
     fn nested_visit_map(&mut self) -> Self::Map {
@@ -432,6 +440,8 @@ impl<'tcx> Visitor<'tcx> for LintLevelsBuilder<'_, QueryMapExpectationsWrapper<'
     }
 }
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 pub struct LintLevelsBuilder<'s, P> {
     sess: &'s Session,
     provider: P,

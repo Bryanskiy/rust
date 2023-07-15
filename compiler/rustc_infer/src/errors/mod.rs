@@ -1,3 +1,5 @@
+#![allow(unnameable_types)]
+
 use hir::GenericParamKind;
 use rustc_errors::{
     AddToDiagnostic, Applicability, Diagnostic, DiagnosticMessage, DiagnosticStyledString,

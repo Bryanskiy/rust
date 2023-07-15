@@ -11,6 +11,8 @@ use crate::{
     traits,
 };
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 pub struct Snapshot<'tcx> {
     pub(crate) undo_len: usize,
     _marker: PhantomData<&'tcx ()>,

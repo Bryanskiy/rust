@@ -1,3 +1,5 @@
+#![allow(unnameable_types)]
+
 use rustc_errors::{
     DiagnosticArgValue, DiagnosticBuilder, DiagnosticMessage, EmissionGuarantee, Handler,
     IntoDiagnostic,

@@ -104,6 +104,8 @@ macro_rules! try_validation {
 /// but avoid string operations in the happy case where no error happens.
 /// So we track a `Vec<PathElem>` where `PathElem` contains all the data we
 /// need to later print something for the user.
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(interpret)`
 #[derive(Copy, Clone, Debug)]
 pub enum PathElem {
     Field(Symbol),

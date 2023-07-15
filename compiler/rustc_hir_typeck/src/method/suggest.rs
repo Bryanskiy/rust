@@ -2960,6 +2960,8 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
     }
 }
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 #[derive(Copy, Clone, Debug)]
 pub enum SelfSource<'a> {
     QPath(&'a hir::Ty<'a>),

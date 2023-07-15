@@ -16,6 +16,8 @@ use std::panic::Location;
 
 /// Error type for `Diagnostic`'s `suggestions` field, indicating that
 /// `.disable_suggestions()` was called on the `Diagnostic`.
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Encodable, Decodable)]
 pub struct SuggestionsDisabled;
 
@@ -127,6 +129,8 @@ pub struct Diagnostic {
     pub emitted_at: DiagnosticLocation,
 }
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 #[derive(Clone, Debug, Encodable, Decodable)]
 pub struct DiagnosticLocation {
     file: Cow<'static, str>,
@@ -197,6 +201,8 @@ impl DiagnosticStyledString {
     }
 }
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 #[derive(Debug, PartialEq, Eq)]
 pub enum StringPart {
     Normal(String),

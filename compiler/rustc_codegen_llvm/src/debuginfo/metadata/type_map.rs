@@ -27,6 +27,8 @@ mod private {
     // it has a private field. We make use of this in order to prevent
     // `UniqueTypeId` from being constructed directly, without asserting
     // the preconditions.
+    #[allow(unnameable_types)]
+    //~^ reachable at visibility `pub`, but can only be named at visibility `pub(type_map)`
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, HashStable)]
     pub struct HiddenZst;
 }

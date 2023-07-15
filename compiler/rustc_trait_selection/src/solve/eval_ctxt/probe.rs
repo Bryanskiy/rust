@@ -2,6 +2,8 @@ use super::EvalCtxt;
 use rustc_middle::traits::solve::{inspect, QueryResult};
 use std::marker::PhantomData;
 
+#[cfg_attr(bootstrap, allow(unnameable_types))]
+//~^ reachable at visibility `pub(solve)`, but can only be named at visibility `pub(eval_ctxt)`
 pub(in crate::solve) struct ProbeCtxt<'me, 'a, 'tcx, F, T> {
     ecx: &'me mut EvalCtxt<'a, 'tcx>,
     probe_kind: F,

@@ -486,6 +486,8 @@ where
 }
 
 /// A view into a single entry in a map.
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(sso)`
 pub struct Entry<'a, K, V> {
     ssomap: &'a mut SsoHashMap<K, V>,
     key: K,

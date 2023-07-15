@@ -51,6 +51,8 @@ pub(crate) enum RegionNameSource {
 
 /// Describes what to highlight to explain to the user that we're giving an anonymous region a
 /// synthesized name, and how to highlight it.
+#[cfg_attr(bootstrap, allow(unnameable_types))]
+//~^ reachable at visibility `pub(crate)`, but can only be named at visibility `pub(diagnostics)`
 #[derive(Debug, Clone)]
 pub(crate) enum RegionNameHighlight {
     /// The anonymous region corresponds to a reference that was found by traversing the type in the HIR.

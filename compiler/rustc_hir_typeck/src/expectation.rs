@@ -7,6 +7,8 @@ use super::FnCtxt;
 
 /// When type-checking an expression, we propagate downward
 /// whatever type hint we are able in the form of an `Expectation`.
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 #[derive(Copy, Clone, Debug)]
 pub enum Expectation<'tcx> {
     /// We know nothing about what type this expression should have.

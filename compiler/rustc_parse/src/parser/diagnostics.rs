@@ -218,11 +218,15 @@ impl MultiSugg {
 /// SnapshotParser is used to create a snapshot of the parser
 /// without causing duplicate errors being emitted when the `Parser`
 /// is dropped.
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(parser)`
 pub struct SnapshotParser<'a> {
     parser: Parser<'a>,
 }
 
 impl<'a> Deref for SnapshotParser<'a> {
+    #[cfg_attr(bootstrap, allow(unnameable_types))]
+    //~^ reachable at visibility `pub`, but can only be named at visibility `pub(parser)`
     type Target = Parser<'a>;
 
     fn deref(&self) -> &Self::Target {

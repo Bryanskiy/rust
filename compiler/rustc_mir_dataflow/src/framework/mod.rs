@@ -53,6 +53,8 @@ pub use self::visitor::{visit_results, ResultsVisitable, ResultsVisitor};
 
 /// Analysis domains are all bitsets of various kinds. This trait holds
 /// operations needed by all of them.
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 pub trait BitSetExt<T> {
     fn domain_size(&self) -> usize;
     fn contains(&self, elem: T) -> bool;
@@ -478,6 +480,8 @@ pub trait GenKill<T> {
 /// Calling `gen`/`kill` on a `GenKillSet` will "build up" a transfer function so that it can be
 /// applied multiple times efficiently. When there are multiple calls to `gen` and/or `kill` for
 /// the same element, the most recent one takes precedence.
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 #[derive(Clone)]
 pub struct GenKillSet<T> {
     gen: HybridBitSet<T>,
@@ -558,6 +562,8 @@ impl Effect {
     }
 }
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct EffectIndex {
     statement_index: usize,
@@ -600,6 +606,8 @@ impl EffectIndex {
     }
 }
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 pub struct SwitchIntTarget {
     pub value: Option<u128>,
     pub target: BasicBlock,

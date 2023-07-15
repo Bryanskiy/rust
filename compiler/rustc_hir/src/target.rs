@@ -10,6 +10,8 @@ use crate::{Item, ItemKind, TraitItem, TraitItemKind};
 use crate::def::DefKind;
 use std::fmt::{self, Display};
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum GenericParamKind {
     Type,

@@ -17,6 +17,8 @@ use crate::{
     universal_regions::UniversalRegions,
 };
 
+#[cfg_attr(bootstrap, allow(unnameable_types))]
+//~^ reachable at visibility `pub(crate)`, but can only be named at visibility `pub(type_check)`
 pub(crate) struct ConstraintConversion<'a, 'tcx> {
     infcx: &'a InferCtxt<'tcx>,
     tcx: TyCtxt<'tcx>,

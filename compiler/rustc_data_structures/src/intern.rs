@@ -6,6 +6,8 @@ use std::ops::Deref;
 use std::ptr;
 
 mod private {
+    #[allow(unnameable_types)]
+    //~^ reachable at visibility `pub`, but can only be named at visibility `pub(intern)`
     #[derive(Clone, Copy, Debug)]
     pub struct PrivateZst;
 }

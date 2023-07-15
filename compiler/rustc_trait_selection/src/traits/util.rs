@@ -29,6 +29,8 @@ pub struct TraitAliasExpander<'tcx> {
 }
 
 /// Stores information about the expansion of a trait via a path of zero or more trait aliases.
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(traits)`
 #[derive(Debug, Clone)]
 pub struct TraitAliasExpansionInfo<'tcx> {
     pub path: SmallVec<[(ty::PolyTraitRef<'tcx>, Span); 4]>,

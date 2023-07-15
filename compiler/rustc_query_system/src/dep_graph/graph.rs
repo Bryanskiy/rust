@@ -54,6 +54,8 @@ impl From<DepNodeIndex> for QueryInvocationId {
     }
 }
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(dep_graph)`
 pub struct MarkFrame<'a> {
     index: SerializedDepNodeIndex,
     parent: Option<&'a MarkFrame<'a>>,

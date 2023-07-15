@@ -19,6 +19,8 @@ type Block = u64;
 /// possible. Currently, if all the blocks have the same value, then the mask represents either a
 /// fully initialized or fully uninitialized const allocation, so we can only store that single
 /// value.
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(allocation)`
 #[derive(Clone, Debug, Eq, PartialEq, TyEncodable, TyDecodable, Hash, HashStable)]
 pub struct InitMask {
     blocks: InitMaskBlocks,
@@ -650,6 +652,8 @@ impl<'a> Iterator for InitChunkIter<'a> {
 
 /// Run-length encoding of the uninit mask.
 /// Used to copy parts of a mask multiple times to another allocation.
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(allocation)`
 pub struct InitCopy {
     /// Whether the first range is initialized.
     initial: bool,

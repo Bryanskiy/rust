@@ -21,6 +21,8 @@ use rustc_span::Span;
 ///
 /// Our representation is a bit mixed here -- in some cases, we
 /// include the self type (e.g., `trait_bounds`) but in others we do not
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 #[derive(Default, PartialEq, Eq, Clone, Debug)]
 pub struct Bounds<'tcx> {
     pub clauses: Vec<(ty::Clause<'tcx>, Span)>,

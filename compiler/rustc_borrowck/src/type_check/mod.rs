@@ -937,6 +937,8 @@ impl<'tcx> MirTypeckRegionConstraints<'tcx> {
 /// required to hold. Normally, this is at a particular point which
 /// created the obligation, but for constraints that the user gave, we
 /// want the constraint to hold at all points.
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum Locations {
     /// Indicates that a type constraint should always be true. This

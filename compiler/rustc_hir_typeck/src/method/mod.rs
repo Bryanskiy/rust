@@ -32,6 +32,8 @@ pub fn provide(providers: &mut Providers) {
     probe::provide(providers);
 }
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 #[derive(Clone, Copy, Debug)]
 pub struct MethodCallee<'tcx> {
     /// Impl method ID, for inherent methods, or trait method ID, otherwise.
@@ -44,6 +46,8 @@ pub struct MethodCallee<'tcx> {
     pub sig: ty::FnSig<'tcx>,
 }
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 #[derive(Debug)]
 pub enum MethodError<'tcx> {
     // Did not find an applicable method, but we did find various near-misses that may work.
@@ -70,6 +74,8 @@ pub enum MethodError<'tcx> {
 
 // Contains a list of static methods that may apply, a list of unsatisfied trait predicates which
 // could lead to matches if satisfied, and a list of not-in-scope traits which may work.
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 #[derive(Debug)]
 pub struct NoMatchData<'tcx> {
     pub static_candidates: Vec<CandidateSource>,
@@ -82,6 +88,8 @@ pub struct NoMatchData<'tcx> {
 
 // A pared down enum describing just the places from which a method
 // candidate can arise. Used for error reporting only.
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 #[derive(Copy, Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum CandidateSource {
     Impl(DefId),

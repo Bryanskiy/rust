@@ -1,3 +1,5 @@
+#![allow(unnameable_types)]
+
 use rustc_macros::Diagnostic;
 use rustc_session::config::CrateType;
 use rustc_span::{Span, Symbol};

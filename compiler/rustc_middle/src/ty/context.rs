@@ -268,6 +268,8 @@ const NUM_PREINTERNED_RE_VARS: u32 = 500;
 const NUM_PREINTERNED_RE_LATE_BOUNDS_I: u32 = 2;
 const NUM_PREINTERNED_RE_LATE_BOUNDS_V: u32 = 20;
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(ty)`
 pub struct CommonTypes<'tcx> {
     pub unit: Ty<'tcx>,
     pub bool: Ty<'tcx>,
@@ -309,6 +311,8 @@ pub struct CommonTypes<'tcx> {
     pub fresh_float_tys: Vec<Ty<'tcx>>,
 }
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(ty)`
 pub struct CommonLifetimes<'tcx> {
     /// `ReStatic`
     pub re_static: Region<'tcx>,
@@ -325,6 +329,8 @@ pub struct CommonLifetimes<'tcx> {
     pub re_late_bounds: Vec<Vec<Region<'tcx>>>,
 }
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(ty)`
 pub struct CommonConsts<'tcx> {
     pub unit: Const<'tcx>,
     pub true_: Const<'tcx>,

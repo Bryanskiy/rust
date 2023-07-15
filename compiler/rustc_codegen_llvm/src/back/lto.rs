@@ -613,6 +613,8 @@ pub(crate) fn run_pass_manager(
     Ok(())
 }
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 pub struct ModuleBuffer(&'static mut llvm::ModuleBuffer);
 
 unsafe impl Send for ModuleBuffer {}
@@ -642,6 +644,8 @@ impl Drop for ModuleBuffer {
     }
 }
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 pub struct ThinData(&'static mut llvm::ThinLTOData);
 
 unsafe impl Send for ThinData {}
@@ -655,6 +659,8 @@ impl Drop for ThinData {
     }
 }
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 pub struct ThinBuffer(&'static mut llvm::ThinLTOBuffer);
 
 unsafe impl Send for ThinBuffer {}

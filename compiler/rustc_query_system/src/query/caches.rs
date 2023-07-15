@@ -36,6 +36,8 @@ impl<'tcx, K: Eq + Hash, V: 'tcx> CacheSelector<'tcx, V> for DefaultCacheSelecto
         V: Copy;
 }
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(query)`
 pub struct DefaultCache<K, V> {
     #[cfg(parallel_compiler)]
     cache: Sharded<FxHashMap<K, (V, DepNodeIndex)>>,
@@ -54,7 +56,11 @@ where
     K: Eq + Hash + Copy + Debug,
     V: Copy,
 {
+    #[cfg_attr(bootstrap, allow(unnameable_types))]
+    //~^ reachable at visibility `pub`, but can only be named at visibility `pub(query)`
     type Key = K;
+    #[cfg_attr(bootstrap, allow(unnameable_types))]
+    //~^ reachable at visibility `pub`, but can only be named at visibility `pub(query)`
     type Value = V;
 
     #[inline(always)]
@@ -108,6 +114,8 @@ impl<'tcx, V: 'tcx> CacheSelector<'tcx, V> for SingleCacheSelector {
         V: Copy;
 }
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(query)`
 pub struct SingleCache<V> {
     cache: Lock<Option<(V, DepNodeIndex)>>,
 }
@@ -122,7 +130,11 @@ impl<V> QueryCache for SingleCache<V>
 where
     V: Copy,
 {
+    #[cfg_attr(bootstrap, allow(unnameable_types))]
+    //~^ reachable at visibility `pub`, but can only be named at visibility `pub(query)`
     type Key = ();
+    #[cfg_attr(bootstrap, allow(unnameable_types))]
+    //~^ reachable at visibility `pub`, but can only be named at visibility `pub(query)`
     type Value = V;
 
     #[inline(always)]
@@ -150,6 +162,8 @@ impl<'tcx, K: Idx, V: 'tcx> CacheSelector<'tcx, V> for VecCacheSelector<K> {
         V: Copy;
 }
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(query)`
 pub struct VecCache<K: Idx, V> {
     #[cfg(parallel_compiler)]
     cache: Sharded<IndexVec<K, Option<(V, DepNodeIndex)>>>,
@@ -168,7 +182,11 @@ where
     K: Eq + Idx + Copy + Debug,
     V: Copy,
 {
+    #[cfg_attr(bootstrap, allow(unnameable_types))]
+    //~^ reachable at visibility `pub`, but can only be named at visibility `pub(query)`
     type Key = K;
+    #[cfg_attr(bootstrap, allow(unnameable_types))]
+    //~^ reachable at visibility `pub`, but can only be named at visibility `pub(query)`
     type Value = V;
 
     #[inline(always)]

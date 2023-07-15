@@ -36,6 +36,8 @@ impl<'a, 'tcx> Deref for ConfirmContext<'a, 'tcx> {
     }
 }
 
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(method)`
 #[derive(Debug)]
 pub struct ConfirmResult<'tcx> {
     pub callee: MethodCallee<'tcx>,

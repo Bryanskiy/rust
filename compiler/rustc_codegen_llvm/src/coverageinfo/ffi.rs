@@ -1,6 +1,8 @@
 use rustc_middle::mir::coverage::{CounterValueReference, MappedExpressionIndex};
 
 /// Must match the layout of `LLVMRustCounterKind`.
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 #[derive(Copy, Clone, Debug)]
 #[repr(C)]
 pub enum CounterKind {
@@ -21,6 +23,8 @@ pub enum CounterKind {
 /// Corresponds to struct `llvm::coverage::Counter`.
 ///
 /// Must match the layout of `LLVMRustCounter`.
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 #[derive(Copy, Clone, Debug)]
 #[repr(C)]
 pub struct Counter {
@@ -64,6 +68,8 @@ impl Counter {
 /// Corresponds to enum `llvm::coverage::CounterExpression::ExprKind`.
 ///
 /// Must match the layout of `LLVMRustCounterExprKind`.
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 #[derive(Copy, Clone, Debug)]
 #[repr(C)]
 pub enum ExprKind {
@@ -74,6 +80,8 @@ pub enum ExprKind {
 /// Corresponds to struct `llvm::coverage::CounterExpression`.
 ///
 /// Must match the layout of `LLVMRustCounterExpression`.
+#[allow(unnameable_types)]
+//~^ reachable at visibility `pub`, but can only be named at visibility `pub(crate)`
 #[derive(Copy, Clone, Debug)]
 #[repr(C)]
 pub struct CounterExpression {
