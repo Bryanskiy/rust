@@ -88,6 +88,7 @@ fn generate_handler(cx: &ExtCtxt<'_>, handler: Ident, span: Span, sig_span: Span
         sig,
         generics: Generics::default(),
         body,
+        delegation: ast::DelegationKind::None,
     }));
 
     let attrs = thin_vec![cx.attr_word(sym::rustc_std_internal_symbol, span)];

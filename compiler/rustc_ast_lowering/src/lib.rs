@@ -121,6 +121,7 @@ struct LoweringContext<'a, 'hir> {
     catch_scope: Option<NodeId>,
     loop_scope: Option<NodeId>,
     is_in_loop_condition: bool,
+    is_generated: bool,
     is_in_trait_impl: bool,
     is_in_dyn_type: bool,
 

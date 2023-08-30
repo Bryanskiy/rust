@@ -32,6 +32,8 @@ macro_rules! arena_types {
                     rustc_target::abi::FieldIdx,
                     rustc_span::symbol::Symbol,
                 >,
+            [] delegation_results: rustc_middle::hir::DelegationResults<'tcx>,
+            [] delegation_kind: rustc_hir::Delegation,
             [decode] typeck_results: rustc_middle::ty::TypeckResults<'tcx>,
             [decode] borrowck_result:
                 rustc_middle::mir::BorrowCheckResult<'tcx>,

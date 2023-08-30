@@ -5,6 +5,7 @@
 use crate::thir::pattern::pat_from_hir;
 use crate::thir::util::UserAnnotatedTyHelpers;
 
+use hir::intravisit;
 use rustc_data_structures::steal::Steal;
 use rustc_errors::ErrorGuaranteed;
 use rustc_hir as hir;
@@ -12,11 +13,13 @@ use rustc_hir::def::DefKind;
 use rustc_hir::def_id::{DefId, LocalDefId};
 use rustc_hir::lang_items::LangItem;
 use rustc_hir::HirId;
+use rustc_hir::ItemLocalId;
 use rustc_hir::Node;
 use rustc_middle::middle::region;
 use rustc_middle::thir::*;
 use rustc_middle::ty::{self, RvalueScopes, TyCtxt};
-use rustc_span::Span;
+use rustc_span::def_id;
+use rustc_span::{symbol::kw, Span, Symbol, DUMMY_SP};
 
 pub(crate) fn thir_body(
     tcx: TyCtxt<'_>,
@@ -33,7 +36,13 @@ pub(crate) fn thir_body(
     let owner_id = hir.local_def_id_to_hir_id(owner_def);
     if let Some(ref fn_decl) = hir.fn_decl_by_hir_id(owner_id) {
         let closure_env_param = cx.closure_env_param(owner_def, owner_id);
-        let explicit_params = cx.explicit_params(owner_id, fn_decl, body);
+        let explicit_params = if let hir::Delegation::Gen { explicit_self, .. } =
+            tcx.delegation_kind(owner_def.to_def_id())
+        {
+            cx.generated_params(owner_id, fn_decl, body, explicit_self)
+        } else {
+            cx.natural_params(owner_id, fn_decl, body)
+        };
         cx.thir.params = closure_env_param.into_iter().chain(explicit_params).collect();
 
         // The resume argument may be missing, in that case we need to provide it here.
@@ -75,6 +84,66 @@ struct Cx<'tcx> {
 
     /// The `DefId` of the owner of this body.
     body_owner: DefId,
+
+    delegation_ctx: DelegationCtx<'tcx>,
+}
+
+struct DelegationCtx<'tcx> {
+    generated_hir: Vec<ItemLocalId>,
+    tcx: TyCtxt<'tcx>,
+    owner: LocalDefId,
+}
+
+impl<'tcx> DelegationCtx<'tcx> {
+    fn new(tcx: TyCtxt<'tcx>, owner: LocalDefId) -> Self {
+        struct FindMax {
+            local_def_id: ItemLocalId,
+        }
+
+        impl intravisit::Visitor<'_> for FindMax {
+            fn visit_id(&mut self, hir_id: HirId) {
+                self.local_def_id = std::cmp::Ord::max(self.local_def_id, hir_id.local_id);
+            }
+        }
+
+        let mut vis = FindMax { local_def_id: ItemLocalId::from_u32(0) };
+        let body = tcx.hir().body(tcx.hir().body_owned_by(owner));
+        intravisit::walk_body(&mut vis, body);
+
+        Self { tcx, owner, generated_hir: vec![vis.local_def_id] }
+    }
+
+    #[must_use]
+    fn next_hir_id(&mut self) -> HirId {
+        let offset: u32 = self.generated_hir[0].into();
+        let local_id = ItemLocalId::from_u32(offset + self.generated_hir.len() as u32);
+        self.generated_hir.push(local_id);
+
+        let mut hir_id = HirId::make_owner(self.owner);
+        hir_id.local_id = local_id;
+        hir_id
+    }
+
+    fn mk_pat(&mut self, ty: ty::Ty<'tcx>, idx: usize) -> Box<Pat<'tcx>> {
+        let mut hir_id = HirId::make_owner(self.owner);
+        hir_id.local_id = self.generated_hir[idx + 1];
+
+        let pat = Pat {
+            ty,
+            span: DUMMY_SP,
+            kind: PatKind::Binding {
+                mutability: rustc_ast::ast::Mutability::Not,
+                name: kw::Empty,
+                mode: BindingMode::ByValue, // todo
+                var: LocalVarId(hir_id),
+                ty,
+                subpattern: None,
+                is_primary: true,
+            },
+        };
+
+        Box::new(pat)
+    }
 }
 
 impl<'tcx> Cx<'tcx> {
@@ -115,6 +184,7 @@ impl<'tcx> Cx<'tcx> {
                 .attrs(hir_id)
                 .iter()
                 .all(|attr| attr.name_or_empty() != rustc_span::sym::custom_mir),
+            delegation_ctx: DelegationCtx::new(tcx, def),
         }
     }
 
@@ -168,15 +238,15 @@ impl<'tcx> Cx<'tcx> {
         }
     }
 
-    fn explicit_params<'a>(
+    fn natural_params<'a>(
         &'a mut self,
         owner_id: HirId,
         fn_decl: &'tcx hir::FnDecl<'tcx>,
         body: &'tcx hir::Body<'tcx>,
-    ) -> impl Iterator<Item = Param<'tcx>> + 'a {
+    ) -> Box<dyn Iterator<Item = Param<'tcx>> + 'a> {
         let fn_sig = self.typeck_results.liberated_fn_sigs()[owner_id];
 
-        body.params.iter().enumerate().map(move |(index, param)| {
+        Box::new(body.params.iter().enumerate().map(move |(index, param)| {
             let ty_span = fn_decl
                 .inputs
                 .get(index)
@@ -203,7 +273,38 @@ impl<'tcx> Cx<'tcx> {
 
             let pat = self.pattern_from_hir(param.pat);
             Param { pat: Some(pat), ty, ty_span, self_kind, hir_id: Some(param.hir_id) }
-        })
+        }))
+    }
+
+    fn generated_params<'a>(
+        &'a mut self,
+        owner_id: HirId,
+        fn_decl: &'tcx hir::FnDecl<'tcx>,
+        body: &'tcx hir::Body<'tcx>,
+        explicit_self: bool,
+    ) -> Box<dyn Iterator<Item = Param<'tcx>> + 'a> {
+        let fn_sig = self.typeck_results.liberated_fn_sigs()[owner_id];
+
+        Box::new(fn_sig.inputs().iter().enumerate().map(move |(index, ty)| {
+            let (pat, self_kind) = match (index, explicit_self) {
+                (0, false) => {
+                    let pat = self.delegation_ctx.mk_pat(*ty, index);
+                    let self_kind = Some(hir::ImplicitSelfKind::ImmRef); // todo
+                    (pat, self_kind)
+                }
+
+                (0, true) => {
+                    let pat = self.pattern_from_hir(body.params[0].pat);
+                    let self_kind = Some(fn_decl.implicit_self);
+                    (pat, self_kind)
+                }
+                (_, true) => (self.delegation_ctx.mk_pat(*ty, index - 1), None),
+
+                (_, false) => (self.delegation_ctx.mk_pat(*ty, index), None),
+            };
+
+            Param { pat: Some(pat), ty: *ty, ty_span: None, self_kind, hir_id: None }
+        }))
     }
 }
 

@@ -303,7 +303,7 @@ impl<'v> hir_visit::Visitor<'v> for StatCollector<'v> {
                 ConstBlock, Array, Call, MethodCall, Tup, Binary, Unary, Lit, Cast, Type,
                 DropTemps, Let, If, Loop, Match, Closure, Block, Assign, AssignOp, Field, Index,
                 Path, AddrOf, Break, Continue, Ret, Become, InlineAsm, OffsetOf, Struct, Repeat,
-                Yield, Err
+                Yield, Err, Underscore
             ]
         );
         hir_visit::walk_expr(self, e)
@@ -503,7 +503,8 @@ impl<'v> ast_visit::Visitor<'v> for StatCollector<'v> {
                 TraitAlias,
                 Impl,
                 MacCall,
-                MacroDef
+                MacroDef,
+                Delegation
             ]
         );
         ast_visit::walk_item(self, i)
@@ -624,7 +625,7 @@ impl<'v> ast_visit::Visitor<'v> for StatCollector<'v> {
     fn visit_assoc_item(&mut self, i: &'v ast::AssocItem, ctxt: ast_visit::AssocCtxt) {
         record_variants!(
             (self, i, i.kind, Id::None, ast, AssocItem, AssocItemKind),
-            [Const, Fn, Type, MacCall]
+            [Const, Fn, Type, MacCall, Delegation]
         );
         ast_visit::walk_assoc_item(self, i, ctxt);
     }

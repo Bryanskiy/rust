@@ -27,7 +27,7 @@ impl<'a> State<'a> {
         self.maybe_print_comment(span.lo());
         self.print_outer_attributes(attrs);
         match kind {
-            ast::ForeignItemKind::Fn(box ast::Fn { defaultness, sig, generics, body }) => {
+            ast::ForeignItemKind::Fn(box ast::Fn { defaultness, sig, generics, body, .. }) => {
                 self.print_fn_full(sig, ident, generics, vis, *defaultness, body.as_deref(), attrs);
             }
             ast::ForeignItemKind::Static(ty, mutbl, body) => {
@@ -178,7 +178,7 @@ impl<'a> State<'a> {
                     *defaultness,
                 );
             }
-            ast::ItemKind::Fn(box ast::Fn { defaultness, sig, generics, body }) => {
+            ast::ItemKind::Fn(box ast::Fn { defaultness, sig, generics, body, .. }) => {
                 self.print_fn_full(
                     sig,
                     item.ident,
@@ -377,6 +377,20 @@ impl<'a> State<'a> {
                     state.print_visibility(&item.vis)
                 });
             }
+            ast::ItemKind::Delegation(del) => {
+                for item in &del.items {
+                    self.print_ident(item.0);
+
+                    if let Some(new_name) = item.1 {
+                        self.print_ident(new_name);
+                    }
+
+                    if let Some(param) = &item.2 {
+                        self.print_param(param, false);
+                    }
+                }
+                self.print_expr(&del.expr);
+            }
         }
         self.ann.post(self, AnnNode::Item(item))
     }
@@ -512,7 +526,7 @@ impl<'a> State<'a> {
         self.maybe_print_comment(span.lo());
         self.print_outer_attributes(attrs);
         match kind {
-            ast::AssocItemKind::Fn(box ast::Fn { defaultness, sig, generics, body }) => {
+            ast::AssocItemKind::Fn(box ast::Fn { defaultness, sig, generics, body, .. }) => {
                 self.print_fn_full(sig, ident, generics, vis, *defaultness, body.as_deref(), attrs);
             }
             ast::AssocItemKind::Const(box ast::ConstItem { defaultness, ty, expr }) => {
@@ -542,6 +556,20 @@ impl<'a> State<'a> {
                 if m.args.need_semicolon() {
                     self.word(";");
                 }
+            }
+            ast::AssocItemKind::Delegation(del) => {
+                for item in &del.items {
+                    self.print_ident(item.0);
+
+                    if let Some(new_name) = item.1 {
+                        self.print_ident(new_name);
+                    }
+
+                    if let Some(param) = &item.2 {
+                        self.print_param(param, false);
+                    }
+                }
+                self.print_expr(&del.expr);
             }
         }
         self.ann.post(self, AnnNode::SubItem(id))

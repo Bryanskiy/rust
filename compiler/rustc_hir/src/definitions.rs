@@ -282,6 +282,7 @@ pub enum DefPathData {
     ImplTrait,
     /// `impl Trait` generated associated type node.
     ImplTraitAssocTy,
+    Delegation,
 }
 
 impl Definitions {
@@ -405,7 +406,7 @@ impl DefPathData {
             TypeNs(name) | ValueNs(name) | MacroNs(name) | LifetimeNs(name) => Some(name),
 
             Impl | ForeignMod | CrateRoot | Use | GlobalAsm | ClosureExpr | Ctor | AnonConst
-            | ImplTrait | ImplTraitAssocTy => None,
+            | ImplTrait | ImplTraitAssocTy | Delegation => None,
         }
     }
 
@@ -420,6 +421,7 @@ impl DefPathData {
             Impl => DefPathDataName::Anon { namespace: kw::Impl },
             ForeignMod => DefPathDataName::Anon { namespace: kw::Extern },
             Use => DefPathDataName::Anon { namespace: kw::Use },
+            Delegation => DefPathDataName::Anon { namespace: kw::Override },
             GlobalAsm => DefPathDataName::Anon { namespace: sym::global_asm },
             ClosureExpr => DefPathDataName::Anon { namespace: sym::closure },
             Ctor => DefPathDataName::Anon { namespace: sym::constructor },

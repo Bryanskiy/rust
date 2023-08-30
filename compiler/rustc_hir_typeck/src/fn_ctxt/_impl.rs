@@ -47,6 +47,10 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
     /// Produces warning on the given node, if the current point in the
     /// function is unreachable, and there hasn't been another warning.
     pub(in super::super) fn warn_if_unreachable(&self, id: hir::HirId, span: Span, kind: &str) {
+        if self.tcx.delegation_kind(self.item_def_id()) != hir::Delegation::None {
+            return;
+        }
+
         // FIXME: Combine these two 'if' expressions into one once
         // let chains are implemented
         if let Diverges::Always { span: orig_span, custom_note } = self.diverges.get() {

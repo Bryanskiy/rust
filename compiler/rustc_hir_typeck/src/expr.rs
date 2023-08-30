@@ -360,6 +360,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
             }
             ExprKind::Field(base, field) => self.check_field(expr, &base, field, expected),
             ExprKind::Index(base, idx) => self.check_expr_index(base, idx, expr),
+            ExprKind::Underscore => tcx.types.never,
             ExprKind::Yield(value, ref src) => self.check_expr_yield(value, expr, src),
             hir::ExprKind::Err(guar) => tcx.ty_error(guar),
         }
@@ -520,8 +521,30 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         args: &'tcx [hir::Expr<'tcx>],
     ) -> Ty<'tcx> {
         let tcx = self.tcx;
+
+        let add_wf_bounds = || {
+            // We always require that the type provided as the value for
+            // a type parameter outlives the moment of instantiation.
+            let substs = self.typeck_results.borrow().node_substs(expr.hir_id);
+            self.add_wf_bounds(substs, expr);
+        };
+
         let (res, opt_ty, segs) =
             self.resolve_ty_and_res_fully_qualified_call(qpath, expr.hir_id, expr.span);
+
+        if matches!(
+            self.tcx.delegation_kind(self.item_def_id()),
+            hir::Delegation::Gen { explicit_self: false, .. }
+        ) && segs.len() == 1
+            && segs[0].ident.name == rustc_span::symbol::kw::SelfLower
+        {
+            let sig = self.tcx.delegate(self.item_def_id().expect_local()).sig;
+            let self_ty = self.tcx.erase_late_bound_regions(sig.input(0));
+            self.write_ty(expr.hir_id, self_ty);
+            add_wf_bounds();
+            return self_ty;
+        };
+
         let ty = match res {
             Res::Err => {
                 self.suggest_assoc_method_call(segs);
@@ -590,11 +613,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
             );
             self.require_type_is_sized_deferred(output, expr.span, traits::SizedReturnType);
         }
-
-        // We always require that the type provided as the value for
-        // a type parameter outlives the moment of instantiation.
-        let substs = self.typeck_results.borrow().node_substs(expr.hir_id);
-        self.add_wf_bounds(substs, expr);
+        add_wf_bounds();
 
         ty
     }
@@ -1265,6 +1284,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         expected: Expectation<'tcx>,
     ) -> Ty<'tcx> {
         let rcvr_t = self.check_expr(&rcvr);
+
         // no need to check for bot/err -- callee does that
         let rcvr_t = self.structurally_resolved_type(rcvr.span, rcvr_t);
         let span = segment.ident.span;

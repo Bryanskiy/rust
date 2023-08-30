@@ -250,8 +250,12 @@ impl<'hir> LoweringContext<'_, 'hir> {
                     self.lower_expr_range(e.span, e1.as_deref(), e2.as_deref(), *lims)
                 }
                 ExprKind::Underscore => {
-                    let guar = self.tcx.sess.emit_err(UnderscoreExprLhsAssign { span: e.span });
-                    hir::ExprKind::Err(guar)
+                    if self.is_generated {
+                        hir::ExprKind::Underscore
+                    } else {
+                        let guar = self.tcx.sess.emit_err(UnderscoreExprLhsAssign { span: e.span });
+                        hir::ExprKind::Err(guar)
+                    }
                 }
                 ExprKind::Path(qself, path) => {
                     let qpath = self.lower_qpath(

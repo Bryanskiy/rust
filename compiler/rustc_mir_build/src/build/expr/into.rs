@@ -247,7 +247,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                     None
                 })
             }
-            ExprKind::Call { ty: _, fun, ref args, from_hir_call, fn_span } => {
+            ExprKind::Call { ty: ty, fun, ref args, from_hir_call, fn_span } => {
                 let fun = unpack!(block = this.as_local_operand(block, &this.thir[fun]));
                 let args: Vec<_> = args
                     .into_iter()

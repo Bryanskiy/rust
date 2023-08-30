@@ -331,6 +331,7 @@ fn mk_main(cx: &mut TestCtxt<'_>) -> P<ast::Item> {
         sig,
         generics: ast::Generics::default(),
         body: Some(main_body),
+        delegation: ast::DelegationKind::None,
     }));
 
     // Honor the reexport_test_harness_main attribute

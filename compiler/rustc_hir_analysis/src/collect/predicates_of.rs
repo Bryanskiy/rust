@@ -18,6 +18,11 @@ use rustc_span::{Span, Symbol, DUMMY_SP};
 /// ID `def_id`. This includes all predicates returned by `predicates_defined_on`, plus
 /// `Self: Trait` predicates for traits.
 pub(super) fn predicates_of(tcx: TyCtxt<'_>, def_id: DefId) -> ty::GenericPredicates<'_> {
+    // FIXME:
+    // if let hir::Delegation::Gen { .. } = tcx.delegation_kind(def_id) {
+    //     return tcx.delegate(def_id).predicates;
+    // }
+
     let mut result = tcx.predicates_defined_on(def_id);
 
     if tcx.is_trait(def_id) {

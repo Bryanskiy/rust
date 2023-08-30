@@ -239,7 +239,7 @@ impl<'r, 'ast, 'tcx> Visitor<'ast> for EffectiveVisibilitiesVisitor<'ast, 'r, 't
             ast::ItemKind::MacCall(..) => panic!(
                 "ast::ItemKind::MacCall encountered, this should not anymore appear at this stage"
             ),
-
+            ast::ItemKind::Delegation(..) => panic!(),
             ast::ItemKind::Mod(..) => {
                 let prev_private_vis =
                     mem::replace(&mut self.current_private_vis, Visibility::Restricted(def_id));

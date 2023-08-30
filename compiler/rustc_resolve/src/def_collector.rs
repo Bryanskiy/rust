@@ -110,6 +110,7 @@ impl<'a, 'b, 'tcx> visit::Visitor<'a> for DefCollector<'a, 'b, 'tcx> {
             ItemKind::Use(..) => {
                 return visit::walk_item(self, i);
             }
+            ItemKind::Delegation(..) => DefPathData::Delegation,
         };
         let def = self.create_def(i.id, def_data, i.span);
 
@@ -130,7 +131,7 @@ impl<'a, 'b, 'tcx> visit::Visitor<'a> for DefCollector<'a, 'b, 'tcx> {
     }
 
     fn visit_fn(&mut self, fn_kind: FnKind<'a>, span: Span, _: NodeId) {
-        if let FnKind::Fn(_, _, sig, _, generics, body) = fn_kind {
+        if let FnKind::Fn(_, _, sig, _, generics, body, _) = fn_kind {
             if let Async::Yes { closure_id, .. } = sig.header.asyncness {
                 self.visit_generics(generics);
 
@@ -227,6 +228,7 @@ impl<'a, 'b, 'tcx> visit::Visitor<'a> for DefCollector<'a, 'b, 'tcx> {
         let def_data = match &i.kind {
             AssocItemKind::Fn(..) | AssocItemKind::Const(..) => DefPathData::ValueNs(i.ident.name),
             AssocItemKind::Type(..) => DefPathData::TypeNs(i.ident.name),
+            AssocItemKind::Delegation(..) => DefPathData::Delegation,
             AssocItemKind::MacCall(..) => return self.visit_macro_invoc(i.id),
         };
 

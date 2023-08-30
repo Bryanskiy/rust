@@ -373,6 +373,7 @@ fn encode_ty_name(tcx: TyCtxt<'_>, def_id: DefId) -> String {
             hir::definitions::DefPathData::ImplTrait => "i",
             hir::definitions::DefPathData::CrateRoot
             | hir::definitions::DefPathData::Use
+            | hir::definitions::DefPathData::Delegation
             | hir::definitions::DefPathData::GlobalAsm
             | hir::definitions::DefPathData::ImplTraitAssocTy
             | hir::definitions::DefPathData::MacroNs(..)

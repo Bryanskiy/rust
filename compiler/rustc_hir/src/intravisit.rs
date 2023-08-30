@@ -802,7 +802,7 @@ pub fn walk_expr<'v, V: Visitor<'v>>(visitor: &mut V, expression: &'v Expr<'v>) 
         ExprKind::Yield(ref subexpression, _) => {
             visitor.visit_expr(subexpression);
         }
-        ExprKind::Lit(_) | ExprKind::Err(_) => {}
+        ExprKind::Lit(_) | ExprKind::Err(_) | ExprKind::Underscore => {}
     }
 }
 
@@ -1016,6 +1016,7 @@ pub fn walk_impl_item<'v, V: Visitor<'v>>(visitor: &mut V, impl_item: &'v ImplIt
         ref defaultness,
         span: _,
         vis_span: _,
+        delegation: _,
     } = *impl_item;
 
     visitor.visit_ident(ident);

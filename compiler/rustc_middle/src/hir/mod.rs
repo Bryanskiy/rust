@@ -119,6 +119,14 @@ impl<'tcx> TyCtxt<'tcx> {
     }
 }
 
+#[derive(Debug, HashStable)]
+pub struct DelegationResults<'tcx> {
+    // todo: data for patterns
+    pub sig: crate::ty::PolyFnSig<'tcx>,
+    pub predicates: crate::ty::GenericPredicates<'tcx>,
+    pub generics: crate::ty::Generics,
+}
+
 pub fn provide(providers: &mut Providers) {
     providers.parent_module_from_def_id = |tcx, id| {
         let hir = tcx.hir();

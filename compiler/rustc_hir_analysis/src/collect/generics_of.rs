@@ -14,6 +14,10 @@ use rustc_span::Span;
 pub(super) fn generics_of(tcx: TyCtxt<'_>, def_id: LocalDefId) -> ty::Generics {
     use rustc_hir::*;
 
+    // FIXME:
+    // if let hir::Delegation::Gen { .. } = tcx.delegation_kind(def_id) {
+    //     return tcx.delegate(def_id).generics.clone();
+    // }
     let hir_id = tcx.hir().local_def_id_to_hir_id(def_id);
 
     let node = tcx.hir().get(hir_id);

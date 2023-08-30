@@ -1036,7 +1036,7 @@ pub fn noop_visit_item_kind<T: MutVisitor>(kind: &mut ItemKind, vis: &mut T) {
         ItemKind::Const(item) => {
             visit_const_item(item, vis);
         }
-        ItemKind::Fn(box Fn { defaultness, generics, sig, body }) => {
+        ItemKind::Fn(box Fn { defaultness, generics, sig, body, .. }) => {
             visit_defaultness(defaultness, vis);
             visit_fn_sig(sig, vis);
             vis.visit_generics(generics);
@@ -1104,6 +1104,7 @@ pub fn noop_visit_item_kind<T: MutVisitor>(kind: &mut ItemKind, vis: &mut T) {
         }
         ItemKind::MacCall(m) => vis.visit_mac_call(m),
         ItemKind::MacroDef(def) => vis.visit_macro_def(def),
+        ItemKind::Delegation(box del) => visit_delegation(del, vis),
     }
 }
 
@@ -1120,7 +1121,7 @@ pub fn noop_flat_map_assoc_item<T: MutVisitor>(
         AssocItemKind::Const(item) => {
             visit_const_item(item, visitor);
         }
-        AssocItemKind::Fn(box Fn { defaultness, generics, sig, body }) => {
+        AssocItemKind::Fn(box Fn { defaultness, generics, sig, body, .. }) => {
             visit_defaultness(defaultness, visitor);
             visitor.visit_generics(generics);
             visit_fn_sig(sig, visitor);
@@ -1142,10 +1143,31 @@ pub fn noop_flat_map_assoc_item<T: MutVisitor>(
             visit_opt(ty, |ty| visitor.visit_ty(ty));
         }
         AssocItemKind::MacCall(mac) => visitor.visit_mac_call(mac),
+        AssocItemKind::Delegation(box del) => visit_delegation(del, visitor),
     }
     visitor.visit_span(span);
     visit_lazy_tts(tokens, visitor);
     smallvec![item]
+}
+
+fn visit_delegation<T: MutVisitor>(del: &mut Delegation, visitor: &mut T) {
+    for item in &mut del.items {
+        visitor.visit_ident(&mut item.0);
+        if let Some(new_name) = &mut item.1 {
+            visitor.visit_ident(new_name);
+        }
+
+        if let Some(param) = &mut item.2 {
+            let Param { attrs, id, pat, span, ty, is_placeholder: _ } = param;
+            visitor.visit_id(id);
+            visit_attrs(attrs, visitor);
+            visitor.visit_pat(pat);
+            visitor.visit_span(span);
+            visitor.visit_ty(ty);
+        }
+    }
+
+    visitor.visit_expr(&mut del.expr);
 }
 
 fn visit_const_item<T: MutVisitor>(
@@ -1205,7 +1227,7 @@ pub fn noop_flat_map_foreign_item<T: MutVisitor>(
             visitor.visit_ty(ty);
             visit_opt(expr, |expr| visitor.visit_expr(expr));
         }
-        ForeignItemKind::Fn(box Fn { defaultness, generics, sig, body }) => {
+        ForeignItemKind::Fn(box Fn { defaultness, generics, sig, body, .. }) => {
             visit_defaultness(defaultness, visitor);
             visitor.visit_generics(generics);
             visit_fn_sig(sig, visitor);

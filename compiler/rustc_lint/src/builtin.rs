@@ -420,6 +420,7 @@ impl EarlyLintPass for UnsafeCode {
             _,
             _,
             body,
+            _,
         ) = fk
         {
             let decorator = match ctxt {

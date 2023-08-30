@@ -326,6 +326,8 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         // otherwise, they need to be identical, because rust doesn't currently support variadic functions
         let mut call_appears_satisfied = if c_variadic {
             provided_arg_count >= minimum_input_count
+        } else if self.tcx.delegation_kind(self.item_def_id()) != hir::Delegation::None {
+            true
         } else {
             provided_arg_count == minimum_input_count
         };
@@ -360,6 +362,13 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 // FIXME: unreachable warning current isn't emitted
                 if idx >= minimum_input_count {
                     continue;
+                }
+
+                if self.tcx.delegation_kind(self.item_def_id()) != hir::Delegation::None
+                    && matches!(arg.kind, ExprKind::Underscore)
+                {
+                    self.check_expr(arg);
+                    break;
                 }
 
                 // For this check, we do *not* want to treat async generator closures (async blocks)

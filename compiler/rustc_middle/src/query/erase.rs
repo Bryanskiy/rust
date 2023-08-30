@@ -132,6 +132,10 @@ impl EraseType for Result<mir::interpret::ConstValue<'_>, mir::interpret::ErrorH
     >()];
 }
 
+impl EraseType for rustc_hir::Delegation {
+    type Result = [u8; size_of::<rustc_hir::Delegation>()];
+}
+
 impl EraseType for Result<Option<ty::ValTree<'_>>, mir::interpret::ErrorHandled> {
     type Result =
         [u8; size_of::<Result<Option<ty::ValTree<'static>>, mir::interpret::ErrorHandled>>()];

@@ -884,8 +884,8 @@ impl<'a: 'ast, 'ast, 'tcx> Visitor<'ast> for LateResolutionVisitor<'a, '_, 'ast,
         match fn_kind {
             // Bail if the function is foreign, and thus cannot validly have
             // a body, or if there's no body for some other reason.
-            FnKind::Fn(FnCtxt::Foreign, _, sig, _, generics, _)
-            | FnKind::Fn(_, _, sig, _, generics, None) => {
+            FnKind::Fn(FnCtxt::Foreign, _, sig, _, generics, _, _)
+            | FnKind::Fn(_, _, sig, _, generics, None, _) => {
                 self.visit_fn_header(&sig.header);
                 self.visit_generics(generics);
                 self.with_lifetime_rib(
@@ -918,7 +918,7 @@ impl<'a: 'ast, 'ast, 'tcx> Visitor<'ast> for LateResolutionVisitor<'a, '_, 'ast,
             // Create a label rib for the function.
             this.with_label_rib(RibKind::ClosureOrAsync, |this| {
                 match fn_kind {
-                    FnKind::Fn(_, _, sig, _, generics, body) => {
+                    FnKind::Fn(_, _, sig, _, generics, body, _) => {
                         this.visit_generics(generics);
 
                         let declaration = &sig.decl;
@@ -2447,6 +2447,7 @@ impl<'a: 'ast, 'b, 'ast, 'tcx> LateResolutionVisitor<'a, 'b, 'ast, 'tcx> {
             ItemKind::ExternCrate(..) => {}
 
             ItemKind::MacCall(_) => panic!("unexpanded macro in resolve!"),
+            ItemKind::Delegation(..) => panic!(),
         }
     }
 
@@ -2721,6 +2722,8 @@ impl<'a: 'ast, 'b, 'ast, 'tcx> LateResolutionVisitor<'a, 'b, 'ast, 'tcx> {
                 AssocItemKind::MacCall(_) => {
                     panic!("unexpanded macro in resolve!")
                 }
+
+                AssocItemKind::Delegation(_) => {}
             };
         }
 
@@ -2956,6 +2959,8 @@ impl<'a: 'ast, 'b, 'ast, 'tcx> LateResolutionVisitor<'a, 'b, 'ast, 'tcx> {
             AssocItemKind::MacCall(_) => {
                 panic!("unexpanded macro in resolve!")
             }
+
+            AssocItemKind::Delegation(..) => {}
         }
     }
 
@@ -2971,6 +2976,10 @@ impl<'a: 'ast, 'b, 'ast, 'tcx> LateResolutionVisitor<'a, 'b, 'ast, 'tcx> {
     ) where
         F: FnOnce(Ident, String, Option<Symbol>) -> ResolutionError<'a>,
     {
+        if matches!(kind, AssocItemKind::Fn(box Fn { delegation: DelegationKind::Proxy, .. })) {
+            return;
+        }
+
         // If there is a TraitRef in scope for an impl, then the method must be in the trait.
         let Some((module, _)) = &self.current_trait_ref else { return; };
         ident.span.normalize_to_macros_2_0_and_adjust(module.expansion);
@@ -3034,7 +3043,9 @@ impl<'a: 'ast, 'b, 'ast, 'tcx> LateResolutionVisitor<'a, 'b, 'ast, 'tcx> {
             AssocItemKind::Const(..) => (rustc_errors::error_code!(E0323), "const"),
             AssocItemKind::Fn(..) => (rustc_errors::error_code!(E0324), "method"),
             AssocItemKind::Type(..) => (rustc_errors::error_code!(E0325), "type"),
-            AssocItemKind::MacCall(..) => span_bug!(span, "unexpanded macro"),
+            AssocItemKind::MacCall(..) | AssocItemKind::Delegation(..) => {
+                span_bug!(span, "unexpanded macro")
+            }
         };
         let trait_path = path_names_to_string(path);
         self.report_error(
@@ -3793,6 +3804,13 @@ impl<'a: 'ast, 'b, 'ast, 'tcx> LateResolutionVisitor<'a, 'b, 'ast, 'tcx> {
             qself, path, ns, finalize,
         );
 
+        // gen function doesn't contain self as local variable => resolve will set Res::mod
+        if let Some((func, _)) = self.diagnostic_metadata.current_function &&
+        let FnKind::Fn(_, _, _, _, _, _, del) = func &&
+        matches!(del, ast::DelegationKind::Gen { explicit_self: false, .. }) {
+            return Ok(Some(PartialRes::new(def::Res::Err)))
+        }
+
         if let Some(qself) = qself {
             if qself.position == 0 {
                 // This is a case like `<T>::B`, where there is no
@@ -4449,6 +4467,7 @@ impl<'ast> Visitor<'ast> for LifetimeCountVisitor<'_, '_, '_> {
             | ItemKind::ExternCrate(..)
             | ItemKind::MacroDef(..)
             | ItemKind::GlobalAsm(..)
+            | ItemKind::Delegation(..)
             | ItemKind::MacCall(..) => {}
         }
         visit::walk_item(self, item)

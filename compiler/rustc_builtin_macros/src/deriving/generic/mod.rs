@@ -1016,6 +1016,7 @@ impl<'a> MethodDef<'a> {
                 sig,
                 generics: fn_generics,
                 body: Some(body_block),
+                delegation: ast::DelegationKind::None,
             })),
             tokens: None,
         })

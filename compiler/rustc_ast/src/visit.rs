@@ -53,7 +53,15 @@ pub enum BoundKind {
 #[derive(Copy, Clone, Debug)]
 pub enum FnKind<'a> {
     /// E.g., `fn foo()`, `fn foo(&self)`, or `extern "Abi" fn foo()`.
-    Fn(FnCtxt, Ident, &'a FnSig, &'a Visibility, &'a Generics, Option<&'a Block>),
+    Fn(
+        FnCtxt,
+        Ident,
+        &'a FnSig,
+        &'a Visibility,
+        &'a Generics,
+        Option<&'a Block>,
+        &'a DelegationKind,
+    ),
 
     /// E.g., `|x, y| body`.
     Closure(&'a ClosureBinder, &'a FnDecl, &'a Expr),
@@ -62,7 +70,7 @@ pub enum FnKind<'a> {
 impl<'a> FnKind<'a> {
     pub fn header(&self) -> Option<&'a FnHeader> {
         match *self {
-            FnKind::Fn(_, _, sig, _, _, _) => Some(&sig.header),
+            FnKind::Fn(_, _, sig, _, _, _, _) => Some(&sig.header),
             FnKind::Closure(_, _, _) => None,
         }
     }
@@ -76,7 +84,7 @@ impl<'a> FnKind<'a> {
 
     pub fn decl(&self) -> &'a FnDecl {
         match self {
-            FnKind::Fn(_, _, sig, _, _, _) => &sig.decl,
+            FnKind::Fn(_, _, sig, _, _, _, _) => &sig.decl,
             FnKind::Closure(_, decl, _) => decl,
         }
     }
@@ -313,9 +321,16 @@ pub fn walk_item<'a, V: Visitor<'a>>(visitor: &mut V, item: &'a Item) {
             visitor.visit_ty(ty);
             walk_list!(visitor, visit_expr, expr);
         }
-        ItemKind::Fn(box Fn { defaultness: _, generics, sig, body }) => {
-            let kind =
-                FnKind::Fn(FnCtxt::Free, item.ident, sig, &item.vis, generics, body.as_deref());
+        ItemKind::Fn(box Fn { defaultness: _, generics, sig, body, delegation }) => {
+            let kind = FnKind::Fn(
+                FnCtxt::Free,
+                item.ident,
+                sig,
+                &item.vis,
+                generics,
+                body.as_deref(),
+                delegation,
+            );
             visitor.visit_fn(kind, item.span, item.id)
         }
         ItemKind::Mod(_unsafety, mod_kind) => match mod_kind {
@@ -368,6 +383,20 @@ pub fn walk_item<'a, V: Visitor<'a>>(visitor: &mut V, item: &'a Item) {
         }
         ItemKind::MacCall(mac) => visitor.visit_mac_call(mac),
         ItemKind::MacroDef(ts) => visitor.visit_mac_def(ts, item.id),
+        ItemKind::Delegation(del) => {
+            for item in &del.items {
+                visitor.visit_ident(item.0);
+
+                if let Some(new_name) = item.1 {
+                    visitor.visit_ident(new_name);
+                }
+
+                if let Some(param) = &item.2 {
+                    visitor.visit_param(param);
+                }
+            }
+            visitor.visit_expr(&del.expr);
+        }
     }
     walk_list!(visitor, visit_attribute, &item.attrs);
 }
@@ -567,8 +596,9 @@ pub fn walk_foreign_item<'a, V: Visitor<'a>>(visitor: &mut V, item: &'a ForeignI
             visitor.visit_ty(ty);
             walk_list!(visitor, visit_expr, expr);
         }
-        ForeignItemKind::Fn(box Fn { defaultness: _, generics, sig, body }) => {
-            let kind = FnKind::Fn(FnCtxt::Foreign, ident, sig, vis, generics, body.as_deref());
+        ForeignItemKind::Fn(box Fn { defaultness: _, generics, sig, body, delegation }) => {
+            let kind =
+                FnKind::Fn(FnCtxt::Foreign, ident, sig, vis, generics, body.as_deref(), delegation);
             visitor.visit_fn(kind, span, id);
         }
         ForeignItemKind::TyAlias(box TyAlias { generics, bounds, ty, .. }) => {
@@ -657,7 +687,7 @@ pub fn walk_fn_decl<'a, V: Visitor<'a>>(visitor: &mut V, function_declaration: &
 
 pub fn walk_fn<'a, V: Visitor<'a>>(visitor: &mut V, kind: FnKind<'a>) {
     match kind {
-        FnKind::Fn(_, _, sig, _, generics, body) => {
+        FnKind::Fn(_, _, sig, _, generics, body, _) => {
             visitor.visit_generics(generics);
             visitor.visit_fn_header(&sig.header);
             walk_fn_decl(visitor, &sig.decl);
@@ -681,8 +711,16 @@ pub fn walk_assoc_item<'a, V: Visitor<'a>>(visitor: &mut V, item: &'a AssocItem,
             visitor.visit_ty(ty);
             walk_list!(visitor, visit_expr, expr);
         }
-        AssocItemKind::Fn(box Fn { defaultness: _, generics, sig, body }) => {
-            let kind = FnKind::Fn(FnCtxt::Assoc(ctxt), ident, sig, vis, generics, body.as_deref());
+        AssocItemKind::Fn(box Fn { defaultness: _, generics, sig, body, delegation }) => {
+            let kind = FnKind::Fn(
+                FnCtxt::Assoc(ctxt),
+                ident,
+                sig,
+                vis,
+                generics,
+                body.as_deref(),
+                delegation,
+            );
             visitor.visit_fn(kind, span, id);
         }
         AssocItemKind::Type(box TyAlias { generics, bounds, ty, .. }) => {
@@ -692,6 +730,20 @@ pub fn walk_assoc_item<'a, V: Visitor<'a>>(visitor: &mut V, item: &'a AssocItem,
         }
         AssocItemKind::MacCall(mac) => {
             visitor.visit_mac_call(mac);
+        }
+        AssocItemKind::Delegation(del) => {
+            for item in &del.items {
+                visitor.visit_ident(item.0);
+
+                if let Some(new_name) = item.1 {
+                    visitor.visit_ident(new_name);
+                }
+
+                if let Some(param) = &item.2 {
+                    visitor.visit_param(param);
+                }
+            }
+            visitor.visit_expr(&del.expr);
         }
     }
 }

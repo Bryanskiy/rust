@@ -895,7 +895,7 @@ impl<'a> Visitor<'a> for AstValidator<'a> {
                     self.err_handler().emit_err(error(span, "`const`", true));
                 }
             }
-            ItemKind::Fn(box Fn { defaultness, sig, generics, body }) => {
+            ItemKind::Fn(box Fn { defaultness, sig, generics, body, delegation }) => {
                 self.check_defaultness(item.span, *defaultness);
 
                 if body.is_none() {
@@ -923,8 +923,15 @@ impl<'a> Visitor<'a> for AstValidator<'a> {
 
                 self.visit_vis(&item.vis);
                 self.visit_ident(item.ident);
-                let kind =
-                    FnKind::Fn(FnCtxt::Free, item.ident, sig, &item.vis, generics, body.as_deref());
+                let kind = FnKind::Fn(
+                    FnCtxt::Free,
+                    item.ident,
+                    sig,
+                    &item.vis,
+                    generics,
+                    body.as_deref(),
+                    delegation,
+                );
                 self.visit_fn(kind, item.span, item.id);
                 walk_list!(self, visit_attribute, &item.attrs);
                 return; // Avoid visiting again.
@@ -1232,13 +1239,14 @@ impl<'a> Visitor<'a> for AstValidator<'a> {
             _,
             _,
             _,
+            _,
         ) = fk
         {
             self.maybe_lint_missing_abi(*sig_span, id);
         }
 
         // Functions without bodies cannot have patterns.
-        if let FnKind::Fn(ctxt, _, sig, _, _, None) = fk {
+        if let FnKind::Fn(ctxt, _, sig, _, _, None, _) = fk {
             Self::check_decl_no_pat(&sig.decl, |span, ident, mut_ident| {
                 if mut_ident && matches!(ctxt, FnCtxt::Assoc(_)) {
                     if let Some(ident) = ident {
@@ -1351,7 +1359,7 @@ impl<'a> Visitor<'a> for AstValidator<'a> {
                 });
                 walk_list!(self, visit_ty, ty);
             }
-            AssocItemKind::Fn(box Fn { sig, generics, body, .. })
+            AssocItemKind::Fn(box Fn { sig, generics, body, delegation, .. })
                 if self.in_const_trait_impl
                     || ctxt == AssocCtxt::Trait
                     || matches!(sig.header.constness, Const::Yes(_)) =>
@@ -1365,6 +1373,7 @@ impl<'a> Visitor<'a> for AstValidator<'a> {
                     &item.vis,
                     generics,
                     body.as_deref(),
+                    delegation,
                 );
                 self.visit_fn(kind, item.span, item.id);
             }

@@ -1589,6 +1589,7 @@ impl<'a> State<'a> {
                 self.word("/*ERROR*/");
                 self.pclose();
             }
+            hir::ExprKind::Underscore => self.word("_"),
         }
         self.ann.post(self, AnnNode::Expr(expr));
         self.end()

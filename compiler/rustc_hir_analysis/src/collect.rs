@@ -18,6 +18,7 @@ use crate::astconv::AstConv;
 use crate::check::intrinsic::intrinsic_operation_unsafety;
 use crate::errors;
 use hir::def::DefKind;
+use hir::Delegation;
 use rustc_data_structures::captures::Captures;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_errors::{Applicability, DiagnosticBuilder, ErrorGuaranteed, StashKey};
@@ -145,8 +146,8 @@ impl<'v> Visitor<'v> for HirPlaceholderCollector {
     }
 }
 
-struct CollectItemTypesVisitor<'tcx> {
-    tcx: TyCtxt<'tcx>,
+pub struct CollectItemTypesVisitor<'tcx> {
+    pub tcx: TyCtxt<'tcx>,
 }
 
 /// If there are any placeholder types (`_`), emit an error explaining that this is not allowed
@@ -703,10 +704,12 @@ fn convert_trait_item(tcx: TyCtxt<'_>, trait_item_id: hir::TraitItemId) {
 
 fn convert_impl_item(tcx: TyCtxt<'_>, impl_item_id: hir::ImplItemId) {
     let def_id = impl_item_id.owner_id;
+    let impl_item = tcx.hir().impl_item(impl_item_id);
+
     tcx.ensure().generics_of(def_id);
     tcx.ensure().type_of(def_id);
     tcx.ensure().predicates_of(def_id);
-    let impl_item = tcx.hir().impl_item(impl_item_id);
+
     match impl_item.kind {
         hir::ImplItemKind::Fn(..) => {
             tcx.ensure().codegen_fn_attrs(def_id);
@@ -1111,9 +1114,14 @@ fn fn_sig(tcx: TyCtxt<'_>, def_id: LocalDefId) -> ty::EarlyBinder<ty::PolyFnSig<
             infer_return_ty_for_fn_sig(tcx, sig, generics, def_id, &icx)
         }
 
-        ImplItem(hir::ImplItem { kind: ImplItemKind::Fn(sig, _), generics, .. }) => {
+        ImplItem(hir::ImplItem {
+            kind: ImplItemKind::Fn(sig, _), generics, delegation, ..
+        }) => {
             // Do not try to infer the return type for a impl method coming from a trait
-            if let Item(hir::Item { kind: ItemKind::Impl(i), .. }) =
+
+            if let Delegation::Gen { .. } = delegation {
+                tcx.delegate(def_id).sig
+            } else if let Item(hir::Item { kind: ItemKind::Impl(i), .. }) =
                 tcx.hir().get_parent(hir_id)
                 && i.of_trait.is_some()
             {
@@ -1175,9 +1183,11 @@ fn fn_sig(tcx: TyCtxt<'_>, def_id: LocalDefId) -> ty::EarlyBinder<ty::PolyFnSig<
             bug!("unexpected sort of node in fn_sig(): {:?}", x);
         }
     };
+
     ty::EarlyBinder::bind(output)
 }
 
+// TODO?
 fn infer_return_ty_for_fn_sig<'tcx>(
     tcx: TyCtxt<'tcx>,
     sig: &hir::FnSig<'_>,

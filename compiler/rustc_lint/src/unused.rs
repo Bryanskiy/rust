@@ -96,6 +96,13 @@ impl<'tcx> LateLintPass<'tcx> for UnusedResults {
     fn check_stmt(&mut self, cx: &LateContext<'_>, s: &hir::Stmt<'_>) {
         let hir::StmtKind::Semi(mut expr) = s.kind else { return; };
 
+        if let Some(body) = cx.enclosing_body &&
+        let body_owner = cx.tcx.hir().body_owner(body) &&
+        cx.tcx.delegation_kind(body_owner.owner.def_id) == hir::Delegation::Proxy
+        {
+            return;
+        }
+
         let mut expr_is_from_block = false;
         while let hir::ExprKind::Block(blk, ..) = expr.kind
             && let hir::Block { expr: Some(e), .. } = blk

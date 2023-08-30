@@ -8,6 +8,7 @@ use rustc_data_structures::fx::FxHashMap;
 use rustc_errors::{ErrorGuaranteed, StashKey};
 use rustc_hir as hir;
 use rustc_hir::intravisit::{self, Visitor};
+use rustc_hir_analysis::astconv::AstConv;
 use rustc_infer::infer::error_reporting::TypeAnnotationNeeded::E0282;
 use rustc_middle::hir::place::Place as HirPlace;
 use rustc_middle::mir::FakeReadCause;
@@ -45,8 +46,12 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         let rustc_dump_user_substs = self.tcx.has_attr(item_def_id, sym::rustc_dump_user_substs);
 
         let mut wbcx = WritebackCx::new(self, body, rustc_dump_user_substs);
-        for param in body.params {
-            wbcx.visit_node_id(param.pat.span, param.hir_id);
+
+        // generated functions don't have id's
+        if self.tcx.delegation_kind(self.item_def_id()) != hir::Delegation::None {
+            for param in body.params {
+                wbcx.visit_node_id(param.pat.span, param.hir_id);
+            }
         }
         // Type only exists for constants and statics, not functions.
         match self.tcx.hir().body_owner_kind(item_def_id) {
@@ -746,6 +751,7 @@ struct Resolver<'cx, 'tcx> {
 
     /// Set to `Some` if any `Ty` or `ty::Const` had to be replaced with an `Error`.
     replaced_with_error: Option<ErrorGuaranteed>,
+    skip_errors: bool,
 }
 
 impl<'cx, 'tcx> Resolver<'cx, 'tcx> {
@@ -754,7 +760,8 @@ impl<'cx, 'tcx> Resolver<'cx, 'tcx> {
         span: &'cx dyn Locatable,
         body: &'tcx hir::Body<'tcx>,
     ) -> Resolver<'cx, 'tcx> {
-        Resolver { fcx, span, body, replaced_with_error: None }
+        let skip_errors = fcx.tcx.delegation_kind(fcx.item_def_id()) == hir::Delegation::Proxy;
+        Resolver { fcx, span, body, replaced_with_error: None, skip_errors }
     }
 
     fn report_error(&self, p: impl Into<ty::GenericArg<'tcx>>) -> ErrorGuaranteed {
@@ -821,9 +828,13 @@ impl<'cx, 'tcx> TypeFolder<TyCtxt<'tcx>> for Resolver<'cx, 'tcx> {
             }
             Err(_) => {
                 debug!("Resolver::fold_ty: input type `{:?}` not fully resolvable", t);
-                let e = self.report_error(t);
-                self.replaced_with_error = Some(e);
-                self.fcx.tcx.ty_error(e)
+                if !self.skip_errors {
+                    let diag = self.report_error(t);
+                    self.replaced_with_error = Some(diag);
+                    self.fcx.tcx.ty_error(diag)
+                } else {
+                    self.fcx.tcx.ty_error_misc()
+                }
             }
         }
     }

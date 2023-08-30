@@ -1192,6 +1192,9 @@ impl<'tcx> Visitor<'tcx> for TypePrivacyVisitor<'tcx> {
             if self.visit(typeck_results.node_type(hir_ty.hir_id)).is_break() {
                 return;
             }
+        } else if matches!(hir_ty.kind, hir::TyKind::Infer) {
+            // skip generated for delegation sig
+            return;
         } else {
             // Types in signatures.
             // FIXME: This is very ineffective. Ideally each HIR type should be converted

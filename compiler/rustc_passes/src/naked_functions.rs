@@ -205,6 +205,7 @@ impl<'tcx> CheckInlineAssembly<'tcx> {
             | ExprKind::Ret(..)
             | ExprKind::OffsetOf(..)
             | ExprKind::Become(..)
+            | ExprKind::Underscore
             | ExprKind::Struct(..)
             | ExprKind::Repeat(..)
             | ExprKind::Yield(..) => {

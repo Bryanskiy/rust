@@ -291,6 +291,7 @@ impl<'a, 'tcx> Resolver<'a, 'tcx> {
         if ident.name == kw::Empty {
             return Some(LexicalScopeBinding::Res(Res::Err));
         }
+
         let (general_span, normalized_span) = if ident.name == kw::SelfUpper {
             // FIXME(jseyfried) improve `Self` hygiene
             let empty_span = ident.span.with_ctxt(SyntaxContext::root());

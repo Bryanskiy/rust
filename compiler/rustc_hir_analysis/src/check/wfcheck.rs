@@ -1594,7 +1594,11 @@ fn check_method_receiver<'tcx>(
         return;
     }
 
-    let span = fn_sig.decl.inputs[0].span;
+    let span = if tcx.delegation_kind(method.def_id) != hir::Delegation::None {
+        fn_sig.span
+    } else {
+        fn_sig.decl.inputs[0].span
+    };
 
     let sig = tcx.fn_sig(method.def_id).subst_identity();
     let sig = tcx.liberate_late_bound_regions(method.def_id, sig);

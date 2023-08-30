@@ -190,6 +190,7 @@ impl<'a, 'tcx> Resolver<'a, 'tcx> {
         parent_scope: ParentScope<'a>,
     ) -> MacroRulesScopeRef<'a> {
         collect_definitions(self, fragment, parent_scope.expansion);
+        // crate::delegate::delegate();
         let mut visitor = BuildReducedGraphVisitor { r: self, parent_scope };
         fragment.visit_with(&mut visitor);
         visitor.parent_scope.macro_rules
@@ -797,9 +798,14 @@ impl<'a, 'b, 'tcx> BuildReducedGraphVisitor<'a, 'b, 'tcx> {
             ItemKind::Impl(box Impl { of_trait: Some(..), .. }) => {
                 self.r.trait_impl_items.insert(local_def_id);
             }
-            ItemKind::Impl { .. } | ItemKind::ForeignMod(..) | ItemKind::GlobalAsm(..) => {}
+            ItemKind::Impl { .. }
+            | ItemKind::ForeignMod(..)
+            | ItemKind::GlobalAsm(..)
+            | ItemKind::Delegation(..) => {}
 
-            ItemKind::MacroDef(..) | ItemKind::MacCall(_) => unreachable!(),
+            ItemKind::MacroDef(..) | ItemKind::MacCall(_) => {
+                unreachable!()
+            }
         }
     }
 
@@ -1363,6 +1369,10 @@ impl<'a, 'b, 'tcx> Visitor<'b> for BuildReducedGraphVisitor<'a, 'b, 'tcx> {
             return;
         }
 
+        if let AssocItemKind::Delegation(_) = item.kind {
+            return;
+        }
+
         let vis = self.resolve_visibility(&item.vis);
         let local_def_id = self.r.local_def_id(item.id);
         let def_id = local_def_id.to_def_id();
@@ -1387,7 +1397,7 @@ impl<'a, 'b, 'tcx> Visitor<'b> for BuildReducedGraphVisitor<'a, 'b, 'tcx> {
                     (DefKind::AssocFn, ValueNS)
                 }
                 AssocItemKind::Type(..) => (DefKind::AssocTy, TypeNS),
-                AssocItemKind::MacCall(_) => bug!(), // handled above
+                AssocItemKind::MacCall(_) | AssocItemKind::Delegation(_) => bug!(), // handled above
             };
 
             let parent = self.parent_scope.module;

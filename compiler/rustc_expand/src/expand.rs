@@ -402,11 +402,13 @@ impl<'a, 'b> MacroExpander<'a, 'b> {
         let krate = self.fully_expand_fragment(AstFragment::Crate(krate)).make_crate();
         assert_eq!(krate.id, ast::CRATE_NODE_ID);
         self.cx.trace_macros_diag();
+        println!("{}", rustc_ast_pretty::pprust::crate_to_string_for_macros(&krate));
         krate
     }
 
     /// Recursively expand all macro invocations in this AST fragment.
     pub fn fully_expand_fragment(&mut self, input_fragment: AstFragment) -> AstFragment {
+        let input_fragment = crate::delegate::delegate(input_fragment);
         let orig_expansion_data = self.cx.current_expansion.clone();
         let orig_force_mode = self.cx.force_mode;
 
@@ -503,6 +505,8 @@ impl<'a, 'b> MacroExpander<'a, 'b> {
                                 .collect::<Vec<_>>()
                         })
                         .unwrap_or_default();
+
+                    let fragment = crate::delegate::delegate(fragment);
 
                     let (fragment, collected_invocations) =
                         self.collect_invocations(fragment, &derive_placeholders);

@@ -472,6 +472,7 @@ impl<'tcx> Visitor<'tcx> for IrMaps<'tcx> {
             | hir::ExprKind::InlineAsm(..)
             | hir::ExprKind::OffsetOf(..)
             | hir::ExprKind::Type(..)
+            | hir::ExprKind::Underscore
             | hir::ExprKind::Err(_)
             | hir::ExprKind::Path(hir::QPath::TypeRelative(..))
             | hir::ExprKind::Path(hir::QPath::LangItem(..)) => {
@@ -492,6 +493,7 @@ const ACC_WRITE: u32 = 2;
 const ACC_USE: u32 = 4;
 
 struct Liveness<'a, 'tcx> {
+    body_owner: LocalDefId,
     ir: &'a mut IrMaps<'tcx>,
     typeck_results: &'a ty::TypeckResults<'tcx>,
     param_env: ty::ParamEnv<'tcx>,
@@ -526,6 +528,7 @@ impl<'a, 'tcx> Liveness<'a, 'tcx> {
         let num_vars = ir.var_kinds.len();
 
         Liveness {
+            body_owner,
             ir,
             typeck_results,
             param_env,
@@ -1136,6 +1139,7 @@ impl<'a, 'tcx> Liveness<'a, 'tcx> {
             hir::ExprKind::Lit(..)
             | hir::ExprKind::ConstBlock(..)
             | hir::ExprKind::Err(_)
+            | hir::ExprKind::Underscore
             | hir::ExprKind::Path(hir::QPath::TypeRelative(..))
             | hir::ExprKind::Path(hir::QPath::LangItem(..))
             | hir::ExprKind::OffsetOf(..) => succ,
@@ -1311,6 +1315,10 @@ impl<'a, 'tcx> Liveness<'a, 'tcx> {
         expr_id: HirId,
         descr: &'desc str,
     ) {
+        if self.ir.tcx.delegation_kind(self.body_owner) == hir::Delegation::Proxy {
+            return;
+        }
+
         if !orig_ty.is_never() {
             // Unreachable code warnings are already emitted during type checking.
             // However, during type checking, full type information is being
@@ -1428,6 +1436,7 @@ fn check_expr<'tcx>(this: &mut Liveness<'_, 'tcx>, expr: &'tcx Expr<'tcx>) {
         | hir::ExprKind::Path(_)
         | hir::ExprKind::Yield(..)
         | hir::ExprKind::Type(..)
+        | hir::ExprKind::Underscore
         | hir::ExprKind::Err(_) => {}
     }
 }

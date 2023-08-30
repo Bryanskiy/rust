@@ -32,6 +32,7 @@ pub mod base;
 pub mod build;
 #[macro_use]
 pub mod config;
+mod delegate;
 pub mod errors;
 pub mod expand;
 pub mod module;

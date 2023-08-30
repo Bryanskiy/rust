@@ -19,7 +19,7 @@ use rustc_middle::ty::subst::InternalSubsts;
 use rustc_middle::ty::{
     self, AdtKind, InlineConstSubsts, InlineConstSubstsParts, ScalarInt, Ty, UpvarSubsts, UserType,
 };
-use rustc_span::{sym, Span};
+use rustc_span::{sym, Span, DUMMY_SP};
 use rustc_target::abi::{FieldIdx, FIRST_VARIANT};
 
 impl<'tcx> Cx<'tcx> {
@@ -281,15 +281,36 @@ impl<'tcx> Cx<'tcx> {
                 let old_adjustment_span =
                     self.adjustment_span.replace((receiver.hir_id, expr_span));
                 info!("Using method span: {:?}", expr.span);
-                let args = std::iter::once(receiver)
-                    .chain(args.iter())
-                    .map(|expr| self.mirror_expr(expr))
-                    .collect();
+
+                let args = if let hir::Delegation::Gen { .. } = self.tcx.delegation_kind(self.body_owner) &&
+                args.len() == 1 &&
+                let hir::ExprKind::Underscore = args[0].kind
+                 {
+                    let sig = self.tcx.delegate(self.body_owner.expect_local()).sig;
+                    let sig = tcx.erase_late_bound_regions(sig);
+                    let inputs = &sig.inputs()[1..];
+                    let rec = self.mirror_expr(receiver);
+
+                    let other: Vec<_> = inputs
+                        .iter()
+                        .map(|ty| {
+                            let hir_id = self.delegation_ctx.next_hir_id();
+                            self.generate_var(hir_id, *ty)
+                        })
+                        .collect();
+                    [[rec].as_slice(), other.as_slice()].concat()
+                } else {
+                    std::iter::once(receiver)
+                        .chain(args.iter())
+                        .map(|expr| self.mirror_expr(expr))
+                        .collect()
+                };
+
                 self.adjustment_span = old_adjustment_span;
                 ExprKind::Call {
                     ty: expr.ty,
                     fun: self.thir.exprs.push(expr),
-                    args,
+                    args: args.into(),
                     from_hir_call: true,
                     fn_span,
                 }
@@ -796,7 +817,7 @@ impl<'tcx> Cx<'tcx> {
             hir::ExprKind::Tup(ref fields) => ExprKind::Tuple { fields: self.mirror_exprs(fields) },
 
             hir::ExprKind::Yield(ref v, _) => ExprKind::Yield { value: self.mirror_expr(v) },
-            hir::ExprKind::Err(_) => unreachable!(),
+            hir::ExprKind::Err(_) | hir::ExprKind::Underscore => unreachable!(),
         };
 
         Expr { temp_lifetime, ty: expr_ty, span: expr.span, kind }
@@ -946,9 +967,25 @@ impl<'tcx> Cx<'tcx> {
             }
 
             Res::Local(var_hir_id) => self.convert_var(var_hir_id),
-
-            _ => span_bug!(expr.span, "res `{:?}` not yet implemented", res),
+            Res::Err => {
+                if let hir::ExprKind::Path(hir::QPath::Resolved(_, path)) = expr.kind &&
+                path.segments.len() == 1 &&
+                path.segments[0].ident.name == rustc_span::symbol::kw::SelfLower {
+                    let hir_id = self.delegation_ctx.next_hir_id();
+                    return self.convert_var(hir_id);
+                }
+                span_bug!(expr.span, "res `{:?}` not yet implemented", res)
+            }
+            _ => {
+                span_bug!(expr.span, "res `{:?}` not yet implemented", res)
+            }
         }
+    }
+
+    fn generate_var(&mut self, hir_id: hir::HirId, ty: ty::Ty<'tcx>) -> ExprId {
+        let kind = self.convert_var(hir_id);
+        let expr = Expr { temp_lifetime: None, ty, span: DUMMY_SP, kind };
+        self.thir.exprs.push(expr)
     }
 
     fn convert_var(&mut self, var_hir_id: hir::HirId) -> ExprKind<'tcx> {

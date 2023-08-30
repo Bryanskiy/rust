@@ -8,6 +8,7 @@
 
 use crate::dep_graph;
 use crate::dep_graph::DepKind;
+use crate::hir::DelegationResults;
 use crate::infer::canonical::{self, Canonical};
 use crate::lint::LintExpectation;
 use crate::metadata::ModChild;
@@ -1118,6 +1119,15 @@ rustc_queries! {
     query check_private_in_public(_: ()) -> () {
         eval_always
         desc { "checking for private elements in public interfaces" }
+    }
+
+    query delegate(key: DefId) -> &'tcx DelegationResults<'tcx> {
+        desc { "delegate" }
+        cycle_delay_bug
+    }
+
+    query delegation_kind(key: DefId) -> hir::Delegation {
+        desc { "delegation kind" }
     }
 
     query reachable_set(_: ()) -> &'tcx LocalDefIdSet {

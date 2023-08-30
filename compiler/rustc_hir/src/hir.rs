@@ -1725,7 +1725,7 @@ impl Expr<'_> {
             ExprKind::Struct(..) => ExprPrecedence::Struct,
             ExprKind::Repeat(..) => ExprPrecedence::Repeat,
             ExprKind::Yield(..) => ExprPrecedence::Yield,
-            ExprKind::Err(_) => ExprPrecedence::Err,
+            ExprKind::Err(_) | ExprKind::Underscore => ExprPrecedence::Err,
         }
     }
 
@@ -1792,6 +1792,7 @@ impl Expr<'_> {
             | ExprKind::Yield(..)
             | ExprKind::Cast(..)
             | ExprKind::DropTemps(..)
+            | ExprKind::Underscore
             | ExprKind::Err(_) => false,
         }
     }
@@ -1878,6 +1879,7 @@ impl Expr<'_> {
             | ExprKind::Binary(..)
             | ExprKind::Yield(..)
             | ExprKind::DropTemps(..)
+            | ExprKind::Underscore
             | ExprKind::Err(_) => true,
         }
     }
@@ -1934,6 +1936,7 @@ pub fn is_range_literal(expr: &Expr<'_>) -> bool {
 pub enum ExprKind<'hir> {
     /// Allow anonymous constants from an inline `const` block
     ConstBlock(ConstBlock),
+    Underscore,
     /// An array (e.g., `[a, b, c, d]`).
     Array(&'hir [Expr<'hir>]),
     /// A function call.
@@ -2382,6 +2385,7 @@ pub struct ImplItem<'hir> {
     pub generics: &'hir Generics<'hir>,
     pub kind: ImplItemKind<'hir>,
     pub defaultness: Defaultness,
+    pub delegation: Delegation,
     pub span: Span,
     pub vis_span: Span,
 }
@@ -2852,6 +2856,13 @@ impl IsAsync {
 pub enum Defaultness {
     Default { has_value: bool },
     Final,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Encodable, Decodable, HashStable_Generic)]
+pub enum Delegation {
+    Gen { explicit_self: bool, proxy: Symbol },
+    Proxy,
+    None,
 }
 
 impl Defaultness {
@@ -4067,7 +4078,7 @@ mod size_asserts {
     static_assert_size!(GenericBound<'_>, 48);
     static_assert_size!(Generics<'_>, 56);
     static_assert_size!(Impl<'_>, 80);
-    static_assert_size!(ImplItem<'_>, 80);
+    static_assert_size!(ImplItem<'_>, 88);
     static_assert_size!(ImplItemKind<'_>, 32);
     static_assert_size!(Item<'_>, 80);
     static_assert_size!(ItemKind<'_>, 48);

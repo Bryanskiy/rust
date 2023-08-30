@@ -758,6 +758,11 @@ fn check_impl_items_against_trait<'tcx>(
     let trait_def = tcx.trait_def(impl_trait_ref.def_id);
 
     for &impl_item in impl_item_refs {
+        // proxy functions are not part of a trait
+        if let hir::Delegation::Proxy = tcx.delegation_kind(impl_item) {
+            continue;
+        }
+
         let ty_impl_item = tcx.associated_item(impl_item);
         let ty_trait_item = if let Some(trait_item_id) = ty_impl_item.trait_item_def_id {
             tcx.associated_item(trait_item_id)

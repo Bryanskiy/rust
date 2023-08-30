@@ -23,6 +23,7 @@ pub mod cast;
 mod check;
 mod closure;
 mod coercion;
+mod delegate;
 mod demand;
 mod diverges;
 mod errors;
@@ -50,6 +51,7 @@ pub use inherited::Inherited;
 
 use crate::check::check_fn;
 use crate::coercion::DynamicCoerceMany;
+use crate::delegate::delegation_kind;
 use crate::diverges::Diverges;
 use crate::expectation::Expectation;
 use crate::fn_ctxt::RawTy;
@@ -192,7 +194,9 @@ fn typeck_with_fallback<'tcx>(
     let mut fcx = FnCtxt::new(&inh, param_env, def_id);
 
     if let Some(hir::FnSig { header, decl, .. }) = fn_sig {
-        let fn_sig = if rustc_hir_analysis::collect::get_infer_ret_ty(&decl.output).is_some() {
+        let fn_sig = if rustc_hir_analysis::collect::get_infer_ret_ty(&decl.output).is_some()
+            && (tcx.delegation_kind(def_id) == hir::Delegation::None)
+        {
             fcx.astconv().ty_of_fn(id, header.unsafety, header.abi, decl, None, None)
         } else {
             tcx.fn_sig(def_id).subst_identity()
@@ -288,7 +292,9 @@ fn typeck_with_fallback<'tcx>(
 
     debug!(pending_obligations = ?fcx.fulfillment_cx.borrow().pending_obligations());
 
-    if let None = fcx.infcx.tainted_by_errors() {
+    // type inference can fail during proxy function typeck due to non complete param_env, but
+    // it's still possible to use incomplete typeck result if method was successfully resolved
+    if let None = fcx.infcx.tainted_by_errors() && tcx.delegation_kind(def_id) != hir::Delegation::Proxy {
         fcx.report_ambiguity_errors();
     }
 
@@ -454,6 +460,7 @@ fn has_expected_num_generic_args(tcx: TyCtxt<'_>, trait_did: DefId, expected: us
 
 pub fn provide(providers: &mut Providers) {
     method::provide(providers);
+    delegate::provide(providers);
     *providers = Providers {
         typeck,
         diagnostic_only_typeck,

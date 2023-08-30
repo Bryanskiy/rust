@@ -2921,6 +2921,14 @@ pub struct Fn {
     pub generics: Generics,
     pub sig: FnSig,
     pub body: Option<P<Block>>,
+    pub delegation: DelegationKind,
+}
+
+#[derive(Clone, PartialEq, Eq, Encodable, Decodable, Debug)]
+pub enum DelegationKind {
+    None,
+    Proxy,
+    Gen { explicit_self: bool, proxy: Symbol },
 }
 
 #[derive(Clone, Encodable, Decodable, Debug)]
@@ -2935,6 +2943,13 @@ pub struct ConstItem {
     pub defaultness: Defaultness,
     pub ty: P<Ty>,
     pub expr: Option<P<Expr>>,
+}
+
+#[derive(Clone, Encodable, Decodable, Debug)]
+pub struct Delegation {
+    pub items: ThinVec<(Ident, Option<Ident>, Option<Param>)>,
+    pub expr: P<Expr>,
+    pub span: Span,
 }
 
 #[derive(Clone, Encodable, Decodable, Debug)]
@@ -3006,6 +3021,8 @@ pub enum ItemKind {
 
     /// A macro definition.
     MacroDef(MacroDef),
+
+    Delegation(Box<Delegation>),
 }
 
 impl ItemKind {
@@ -3013,7 +3030,8 @@ impl ItemKind {
         use ItemKind::*;
         match self {
             Use(..) | Static(..) | Const(..) | Fn(..) | Mod(..) | GlobalAsm(..) | TyAlias(..)
-            | Struct(..) | Union(..) | Trait(..) | TraitAlias(..) | MacroDef(..) => "a",
+            | Struct(..) | Union(..) | Trait(..) | TraitAlias(..) | MacroDef(..)
+            | Delegation(..) => "a",
             ExternCrate(..) | ForeignMod(..) | MacCall(..) | Enum(..) | Impl { .. } => "an",
         }
     }
@@ -3037,6 +3055,7 @@ impl ItemKind {
             ItemKind::MacCall(..) => "item macro invocation",
             ItemKind::MacroDef(..) => "macro definition",
             ItemKind::Impl { .. } => "implementation",
+            ItemKind::Delegation(..) => "delegation",
         }
     }
 
@@ -3077,6 +3096,7 @@ pub enum AssocItemKind {
     Type(Box<TyAlias>),
     /// A macro expanding to associated items.
     MacCall(P<MacCall>),
+    Delegation(Box<Delegation>),
 }
 
 impl AssocItemKind {
@@ -3085,7 +3105,7 @@ impl AssocItemKind {
             Self::Const(box ConstItem { defaultness, .. })
             | Self::Fn(box Fn { defaultness, .. })
             | Self::Type(box TyAlias { defaultness, .. }) => defaultness,
-            Self::MacCall(..) => Defaultness::Final,
+            Self::MacCall(..) | Self::Delegation(..) => Defaultness::Final,
         }
     }
 }
@@ -3097,6 +3117,7 @@ impl From<AssocItemKind> for ItemKind {
             AssocItemKind::Fn(fn_kind) => ItemKind::Fn(fn_kind),
             AssocItemKind::Type(ty_alias_kind) => ItemKind::TyAlias(ty_alias_kind),
             AssocItemKind::MacCall(a) => ItemKind::MacCall(a),
+            AssocItemKind::Delegation(del) => ItemKind::Delegation(del),
         }
     }
 }
@@ -3110,6 +3131,7 @@ impl TryFrom<ItemKind> for AssocItemKind {
             ItemKind::Fn(fn_kind) => AssocItemKind::Fn(fn_kind),
             ItemKind::TyAlias(ty_kind) => AssocItemKind::Type(ty_kind),
             ItemKind::MacCall(a) => AssocItemKind::MacCall(a),
+            ItemKind::Delegation(del) => AssocItemKind::Delegation(del),
             _ => return Err(item_kind),
         })
     }
@@ -3171,7 +3193,7 @@ mod size_asserts {
     static_assert_size!(Block, 32);
     static_assert_size!(Expr, 72);
     static_assert_size!(ExprKind, 40);
-    static_assert_size!(Fn, 152);
+    static_assert_size!(Fn, 160);
     static_assert_size!(ForeignItem, 96);
     static_assert_size!(ForeignItemKind, 24);
     static_assert_size!(GenericArg, 24);

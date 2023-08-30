@@ -2,7 +2,7 @@ use crate::errors;
 
 use super::diagnostics::{dummy_arg, ConsumeClosingDelim};
 use super::ty::{AllowPlus, RecoverQPath, RecoverReturnSign};
-use super::{AttrWrapper, FollowedByType, ForceCollect, Parser, PathStyle, TrailingToken};
+use super::{AttrWrapper, FollowedByType, ForceCollect, Parser, PathStyle, SeqSep, TrailingToken};
 use ast::StaticItem;
 use rustc_ast::ast::*;
 use rustc_ast::ptr::P;
@@ -209,7 +209,16 @@ impl<'a> Parser<'a> {
             // FUNCTION ITEM
             let (ident, sig, generics, body) =
                 self.parse_fn(attrs, fn_parse_mode, lo, vis, case)?;
-            (ident, ItemKind::Fn(Box::new(Fn { defaultness: def_(), sig, generics, body })))
+            (
+                ident,
+                ItemKind::Fn(Box::new(Fn {
+                    defaultness: def_(),
+                    sig,
+                    generics,
+                    body,
+                    delegation: DelegationKind::None,
+                })),
+            )
         } else if self.eat_keyword(kw::Extern) {
             if self.eat_keyword(kw::Crate) {
                 // EXTERN CRATE
@@ -247,6 +256,8 @@ impl<'a> Parser<'a> {
         {
             // IMPL ITEM
             self.parse_item_impl(attrs, def_())?
+        } else if self.check_keyword(kw::Override) {
+            self.parse_item_delegation()?
         } else if self.check_keyword(kw::Mod)
             || self.check_keyword(kw::Unsafe) && self.is_keyword_ahead(1, &[kw::Mod])
         {
@@ -652,6 +663,35 @@ impl<'a> Parser<'a> {
             }
         };
 
+        Ok((Ident::empty(), item_kind))
+    }
+
+    fn parse_item_delegation(&mut self) -> PResult<'a, ItemInfo> {
+        let span = self.token.span;
+        self.expect_keyword(kw::Override)?;
+
+        let (items, _) = self.parse_seq_to_end(
+            &token::OpenDelim(Delimiter::Brace),
+            SeqSep::trailing_allowed(token::Comma),
+            |p| {
+                let ident = p.parse_ident()?;
+                let self_ty = if p.eat(&token::OpenDelim(Delimiter::Parenthesis)) {
+                    let res = p.parse_self_param()?;
+                    p.expect(&token::CloseDelim(Delimiter::Parenthesis))?;
+                    res
+                } else {
+                    None
+                };
+                let new_name = if p.eat_keyword(kw::As) { Some(p.parse_ident()?) } else { None };
+                Ok((ident, new_name, self_ty))
+            },
+        )?;
+
+        let expr = self.parse_expr()?;
+        self.expect(&token::CloseDelim(Delimiter::Brace))?;
+        let span = span.to(self.prev_token.span);
+
+        let item_kind = ItemKind::Delegation(Box::new(Delegation { items, expr, span }));
         Ok((Ident::empty(), item_kind))
     }
 

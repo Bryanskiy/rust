@@ -1,5 +1,6 @@
 use crate::build::expr::as_place::PlaceBuilder;
 use crate::build::scope::DropKind;
+use hir::HirId;
 use rustc_apfloat::ieee::{Double, Single};
 use rustc_apfloat::Float;
 use rustc_ast::attr;
@@ -54,6 +55,10 @@ pub(crate) fn closure_saved_names_of_captured_variables<'tcx>(
 
 /// Construct the MIR for a given `DefId`.
 fn mir_build(tcx: TyCtxt<'_>, def: LocalDefId) -> Body<'_> {
+    if tcx.delegation_kind(def.to_def_id()) == hir::Delegation::Proxy {
+        return construct_empty(tcx, def);
+    }
+
     // Ensure unsafeck and abstract const building is ran before we steal the THIR.
     tcx.ensure_with_value().thir_check_unsafety(def);
     tcx.ensure_with_value().thir_abstract_const(def);
@@ -668,6 +673,60 @@ fn construct_error(tcx: TyCtxt<'_>, def: LocalDefId, err: ErrorGuaranteed) -> Bo
     );
     body.generator.as_mut().map(|gen| gen.yield_ty = Some(ty));
     body
+}
+
+fn construct_empty(tcx: TyCtxt<'_>, def: LocalDefId) -> Body<'_> {
+    let span = tcx.def_span(def);
+    let hir_id = tcx.hir().local_def_id_to_hir_id(def);
+    let generator_kind = tcx.generator_kind(def);
+    let body_owner_kind = tcx.hir().body_owner_kind(def);
+
+    let mut local_decls = IndexVec::from_elem_n(LocalDecl::new(tcx.types.unit, span), 1);
+    let source_info = SourceInfo { span, scope: OUTERMOST_SOURCE_SCOPE };
+
+    let num_params = match body_owner_kind {
+        hir::BodyOwnerKind::Fn => {
+            // Some MIR passes will expect the number of parameters to match the
+            // function declaration.
+            let inputs = tcx.fn_sig(def).skip_binder().skip_binder().inputs();
+            for ty in inputs.iter() {
+                local_decls.push(LocalDecl::with_source_info(*ty, source_info));
+            }
+
+            inputs.len()
+        }
+        hir::BodyOwnerKind::Closure | hir::BodyOwnerKind::Const | hir::BodyOwnerKind::Static(_) => {
+            unreachable!()
+        }
+    };
+    let mut cfg = CFG { basic_blocks: IndexVec::new() };
+    let mut source_scopes = IndexVec::new();
+
+    cfg.start_new_block();
+    source_scopes.push(SourceScopeData {
+        span,
+        parent_scope: None,
+        inlined: None,
+        inlined_parent_scope: None,
+        local_data: ClearCrossCrate::Set(SourceScopeLocalData {
+            lint_root: hir_id,
+            safety: Safety::Safe,
+        }),
+    });
+    cfg.terminate(START_BLOCK, source_info, TerminatorKind::Return);
+
+    Body::new(
+        MirSource::item(def.to_def_id()),
+        cfg.basic_blocks,
+        source_scopes,
+        local_decls,
+        IndexVec::new(),
+        num_params,
+        vec![],
+        span,
+        generator_kind,
+        None,
+    )
 }
 
 impl<'a, 'tcx> Builder<'a, 'tcx> {

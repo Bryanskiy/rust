@@ -784,6 +784,7 @@ impl<'tcx> Printer<'tcx> for &mut SymbolMangler<'tcx> {
             // These should never show up as `path_append` arguments.
             DefPathData::CrateRoot
             | DefPathData::Use
+            | DefPathData::Delegation
             | DefPathData::GlobalAsm
             | DefPathData::Impl
             | DefPathData::ImplTraitAssocTy
