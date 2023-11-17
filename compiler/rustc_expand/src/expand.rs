@@ -402,7 +402,6 @@ impl<'a, 'b> MacroExpander<'a, 'b> {
         let krate = self.fully_expand_fragment(AstFragment::Crate(krate)).make_crate();
         assert_eq!(krate.id, ast::CRATE_NODE_ID);
         self.cx.trace_macros_diag();
-        println!("{}", rustc_ast_pretty::pprust::crate_to_string_for_macros(&krate));
         krate
     }
 

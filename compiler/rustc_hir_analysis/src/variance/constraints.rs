@@ -47,6 +47,7 @@ pub struct CurrentItem {
 
 pub fn add_constraints_from_crate<'a, 'tcx>(
     terms_cx: TermsContext<'a, 'tcx>,
+    skip_delegation: bool,
 ) -> ConstraintContext<'a, 'tcx> {
     let tcx = terms_cx.tcx;
     let covariant = terms_cx.arena.alloc(ConstantTerm(ty::Covariant));
@@ -65,6 +66,10 @@ pub fn add_constraints_from_crate<'a, 'tcx>(
     let crate_items = tcx.hir_crate_items(());
 
     for def_id in crate_items.definitions() {
+        if skip_delegation && let rustc_hir::Delegation::Gen { .. } = tcx.delegation_kind(def_id) {
+            continue;
+        }
+
         let def_kind = tcx.def_kind(def_id);
         match def_kind {
             DefKind::Struct | DefKind::Union | DefKind::Enum => {

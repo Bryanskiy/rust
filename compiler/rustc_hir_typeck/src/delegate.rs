@@ -1,5 +1,6 @@
 use hir::intravisit::{self, Visitor};
 use hir::{Delegation, ExprKind};
+use rustc_data_structures::fx::FxHashMap;
 use rustc_hir as hir;
 use rustc_middle::hir::{nested_filter, DelegationResults};
 use rustc_middle::query::Providers;
@@ -8,12 +9,27 @@ use rustc_span::def_id::DefId;
 use rustc_type_ir::fold::TypeSuperFoldable;
 use ty::fold::{TypeFoldable, TypeFolder};
 
-struct ReplaceFolder<'tcx> {
+pub struct TyPrinter<'tcx> {
+    tcx: TyCtxt<'tcx>,
+}
+
+impl<'tcx> TypeFolder<TyCtxt<'tcx>> for TyPrinter<'tcx> {
+    fn interner(&self) -> TyCtxt<'tcx> {
+        self.tcx
+    }
+
+    fn fold_ty(&mut self, ty: Ty<'tcx>) -> Ty<'tcx> {
+        println!("TyPrinter: {:?}", ty.kind());
+        ty.super_fold_with(self)
+    }
+}
+
+struct SelfReplaceFolder<'tcx> {
     tcx: TyCtxt<'tcx>,
     target: Ty<'tcx>,
 }
 
-impl<'tcx> TypeFolder<TyCtxt<'tcx>> for ReplaceFolder<'tcx> {
+impl<'tcx> TypeFolder<TyCtxt<'tcx>> for SelfReplaceFolder<'tcx> {
     fn interner(&self) -> TyCtxt<'tcx> {
         self.tcx
     }
@@ -24,6 +40,37 @@ impl<'tcx> TypeFolder<TyCtxt<'tcx>> for ReplaceFolder<'tcx> {
             ty::Ref(..) | ty::Bound(..) => ty.super_fold_with(self),
             _ => self.target,
         }
+    }
+}
+
+struct GenericsReplaceFolder<'tcx, 'a> {
+    tcx: TyCtxt<'tcx>,
+    replace_map: &'a ReplaceMap<'tcx>,
+}
+
+impl<'tcx, 'a> GenericsReplaceFolder<'tcx, 'a> {
+    fn bitwise_comparison(lhs: Ty<'tcx>, rhs: Ty<'tcx>) -> bool {
+        match (lhs.kind(), rhs.kind()) {
+            (ty::Param(l), ty::Param(r)) => l == r,
+            (ty::Bound(li, l), ty::Bound(ri, r)) => li == ri && l == r,
+            _ => false,
+        }
+    }
+}
+
+impl<'tcx, 'a> TypeFolder<TyCtxt<'tcx>> for GenericsReplaceFolder<'tcx, 'a> {
+    fn interner(&self) -> TyCtxt<'tcx> {
+        self.tcx
+    }
+
+    // FIXME same for regions
+    fn fold_ty(&mut self, ty: Ty<'tcx>) -> Ty<'tcx> {
+        for (before, after) in self.replace_map.iter() {
+            if let Some(before_ty) = before.as_type() && Self::bitwise_comparison(before_ty, ty) {
+                return after.expect_ty();
+            }
+        }
+        ty.super_fold_with(self)
     }
 }
 
@@ -51,7 +98,6 @@ impl<'tcx> ProxyResolver<'tcx> {
         let mut visitor = Self::new(tcx, typeck);
         intravisit::walk_impl_item(&mut visitor, proxy);
 
-        // FIXME: report error if method call wasn't found
         visitor.result.expect("couldn't resolve delegation fn")
     }
 
@@ -99,6 +145,13 @@ fn impl_item_self_ty<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId) -> Ty<'tcx> {
     tcx.type_of(parent).skip_binder()
 }
 
+type ReplaceMap<'tcx> = FxHashMap<ty::GenericArg<'tcx>, ty::GenericArg<'tcx>>;
+
+struct GenericsInferenceResult<'tcx> {
+    generics: ty::Generics,
+    replace_map: ReplaceMap<'tcx>,
+}
+
 struct DelegationCtx<'tcx> {
     tcx: TyCtxt<'tcx>,
     def_id: DefId,
@@ -109,28 +162,39 @@ impl<'tcx> DelegationCtx<'tcx> {
         Self { tcx, def_id }
     }
 
-    fn infer_sig(&self, res: DefId) -> ty::PolyFnSig<'tcx> {
+    fn infer_sig<'a>(&self, res: DefId, replace_map: &'a ReplaceMap<'tcx>) -> ty::PolyFnSig<'tcx> {
         let res_sig = self.tcx.fn_sig(res);
         let res_bound_vars = res_sig.skip_binder().bound_vars();
 
-        let (inputs, output, c_variadic, unsafety, abi) = if self.tcx.associated_item(res).container
-            == ty::AssocItemContainer::TraitContainer
-        {
+        let assoc_item = self.tcx.associated_item(res);
+        let new_sig = if assoc_item.container == ty::AssocItemContainer::TraitContainer {
+            // FIXME: check assoc_item.fn_has_self_parameter
+
             let self_ty = ty::GenericArg::from(impl_item_self_ty(self.tcx, self.def_id));
+            let res_substs = ty::InternalSubsts::identity_for_item(self.tcx, res);
 
-            let own_substs = self
-                .tcx
-                .generics_of(res)
-                .own_substs(ty::InternalSubsts::identity_for_item(self.tcx, res));
-
-            let substs_iter = std::iter::once(self_ty).chain(own_substs.iter().copied());
+            let substs_iter = std::iter::once(self_ty).chain(res_substs.iter().skip(1));
             let substs = self.tcx.mk_substs_from_iter(substs_iter);
-            let sig = res_sig.subst(self.tcx, substs.as_slice()).skip_binder();
-            let new_inputs: Vec<_> = sig.inputs().iter().copied().collect();
-            (new_inputs, sig.output(), sig.c_variadic, sig.unsafety, sig.abi)
+            let sig = res_sig.subst(self.tcx, substs).skip_binder();
+
+            let mut folder = GenericsReplaceFolder { tcx: self.tcx, replace_map };
+            let new_inputs: Vec<_> = sig
+                .inputs()
+                .iter()
+                .enumerate()
+                .map(|(idx, input)| if idx != 0 { input.fold_with(&mut folder) } else { *input })
+                .collect();
+            let new_output = sig.output().fold_with(&mut folder);
+
+            let new_sig =
+                self.tcx.mk_fn_sig(new_inputs, new_output, sig.c_variadic, sig.unsafety, sig.abi);
+
+            ty::Binder::bind_with_vars(new_sig, res_bound_vars)
         } else {
-            let mut folder =
-                ReplaceFolder { tcx: self.tcx, target: impl_item_self_ty(self.tcx, self.def_id) };
+            let mut folder = SelfReplaceFolder {
+                tcx: self.tcx,
+                target: impl_item_self_ty(self.tcx, self.def_id),
+            };
 
             let sig = res_sig.skip_binder().skip_binder();
 
@@ -145,37 +209,67 @@ impl<'tcx> DelegationCtx<'tcx> {
                 )
                 .collect();
 
-            (new_inputs, sig.output(), sig.c_variadic, sig.unsafety, sig.abi)
+            let new_sig =
+                self.tcx.mk_fn_sig(new_inputs, sig.output(), sig.c_variadic, sig.unsafety, sig.abi);
+            ty::Binder::bind_with_vars(new_sig, res_bound_vars)
         };
 
-        let new_sig = self.tcx.mk_fn_sig(inputs, output, c_variadic, unsafety, abi);
-        println!("new sig: {:?}", new_sig);
-
-        ty::Binder::bind_with_vars(new_sig, res_bound_vars)
+        new_sig
     }
 
-    fn infer_predicates(&self, res: DefId) -> ty::GenericPredicates<'tcx> {
+    fn infer_predicates<'a>(
+        &self,
+        res: DefId,
+        replace_map: &'a ReplaceMap<'tcx>,
+    ) -> ty::GenericPredicates<'tcx> {
         let mut res_predicates = self.tcx.predicates_of(res);
         res_predicates.parent = Some(self.tcx.parent(self.def_id));
-        println!("new predicates: {:?}", res_predicates);
+        let mut folder = GenericsReplaceFolder { tcx: self.tcx, replace_map };
+
+        let new_predicates = self.tcx.arena.alloc_from_iter(
+            res_predicates.predicates.iter().map(|clause| clause.fold_with(&mut folder)),
+        );
+
+        res_predicates.predicates = new_predicates;
         res_predicates
     }
 
-    // FIXME: if parent contains generics -> TypeFolder for reordering params
-    fn infer_generics(&self, res: DefId) -> ty::Generics {
-        let mut res_generics = self.tcx.generics_of(res).clone();
-        res_generics.parent = Some(self.tcx.parent(self.def_id));
-        println!("new generics: {:?}", res_generics);
-        res_generics
+    fn infer_generics(&self, res: DefId) -> GenericsInferenceResult<'tcx> {
+        let res_generics = self.tcx.generics_of(res);
+        let mut infered_generics = res_generics.clone();
+        let parent_generics = self.tcx.generics_of(self.tcx.parent(self.def_id));
+
+        infered_generics.parent = Some(self.tcx.parent(self.def_id));
+        infered_generics.parent_count = parent_generics.parent_count + parent_generics.params.len();
+        infered_generics.has_self = false;
+        infered_generics.params = infered_generics.params;
+
+        let mut replace_map: ReplaceMap<'tcx> = FxHashMap::default();
+        let offset = infered_generics.parent_count as i32 - res_generics.parent_count as i32;
+
+        for def in &mut infered_generics.params {
+            let ty_before = self.tcx.mk_param_from_def(&def);
+            // FIXME: generics renaming in case of ambiguity
+            def.index = if offset.is_negative() {
+                def.index - offset.wrapping_abs() as u32
+            } else {
+                def.index + offset as u32
+            };
+            let ty_after = self.tcx.mk_param_from_def(&def);
+            assert!(matches!(replace_map.insert(ty_before, ty_after), None));
+        }
+
+        GenericsInferenceResult { generics: infered_generics, replace_map }
     }
 
     fn delegate(&self) -> &'tcx DelegationResults<'tcx> {
         let res = ProxyResolver::resolve(self.tcx, self.def_id);
 
+        let generics = self.infer_generics(res);
         self.tcx.arena.alloc(DelegationResults {
-            sig: self.infer_sig(res),
-            predicates: self.infer_predicates(res),
-            generics: self.infer_generics(res),
+            sig: self.infer_sig(res, &generics.replace_map),
+            predicates: self.infer_predicates(res, &generics.replace_map),
+            generics: generics.generics,
         })
     }
 }

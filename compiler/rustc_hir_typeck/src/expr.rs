@@ -360,7 +360,15 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
             }
             ExprKind::Field(base, field) => self.check_field(expr, &base, field, expected),
             ExprKind::Index(base, idx) => self.check_expr_index(base, idx, expr),
-            ExprKind::Underscore => tcx.types.never,
+            ExprKind::Underscore => match self.tcx.delegation_kind(self.item_def_id()) {
+                hir::Delegation::Proxy => tcx.types.never,
+                hir::Delegation::Gen { .. } => {
+                    let sig = self.tcx.fn_sig(self.item_def_id()).subst_identity();
+                    let sig = self.tcx.erase_late_bound_regions(sig);
+                    self.tcx.mk_tup(&sig.inputs()[1..])
+                }
+                hir::Delegation::None => unreachable!(),
+            },
             ExprKind::Yield(value, ref src) => self.check_expr_yield(value, expr, src),
             hir::ExprKind::Err(guar) => tcx.ty_error(guar),
         }

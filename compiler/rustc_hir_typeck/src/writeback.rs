@@ -751,7 +751,6 @@ struct Resolver<'cx, 'tcx> {
 
     /// Set to `Some` if any `Ty` or `ty::Const` had to be replaced with an `Error`.
     replaced_with_error: Option<ErrorGuaranteed>,
-    skip_errors: bool,
 }
 
 impl<'cx, 'tcx> Resolver<'cx, 'tcx> {
@@ -760,8 +759,7 @@ impl<'cx, 'tcx> Resolver<'cx, 'tcx> {
         span: &'cx dyn Locatable,
         body: &'tcx hir::Body<'tcx>,
     ) -> Resolver<'cx, 'tcx> {
-        let skip_errors = fcx.tcx.delegation_kind(fcx.item_def_id()) == hir::Delegation::Proxy;
-        Resolver { fcx, span, body, replaced_with_error: None, skip_errors }
+        Resolver { fcx, span, body, replaced_with_error: None }
     }
 
     fn report_error(&self, p: impl Into<ty::GenericArg<'tcx>>) -> ErrorGuaranteed {
@@ -828,12 +826,12 @@ impl<'cx, 'tcx> TypeFolder<TyCtxt<'tcx>> for Resolver<'cx, 'tcx> {
             }
             Err(_) => {
                 debug!("Resolver::fold_ty: input type `{:?}` not fully resolvable", t);
-                if !self.skip_errors {
+                if self.fcx.tcx.delegation_kind(self.fcx.item_def_id()) != hir::Delegation::Proxy {
                     let diag = self.report_error(t);
                     self.replaced_with_error = Some(diag);
                     self.fcx.tcx.ty_error(diag)
                 } else {
-                    self.fcx.tcx.ty_error_misc()
+                    self.fcx.tcx.types.unit
                 }
             }
         }

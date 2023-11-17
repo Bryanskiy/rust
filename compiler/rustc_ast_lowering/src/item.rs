@@ -880,7 +880,8 @@ impl<'hir> LoweringContext<'_, 'hir> {
             }
         };
 
-        let delegation = self.lower_delegation_kind(delegation, i.id);
+        // FIXME: reuse from ast?
+        let delegation = self.lower_delegation_kind(delegation);
 
         let item = hir::ImplItem {
             owner_id: hir_id.expect_owner(),
@@ -895,11 +896,7 @@ impl<'hir> LoweringContext<'_, 'hir> {
         self.arena.alloc(item)
     }
 
-    fn lower_delegation_kind(
-        &mut self,
-        d: DelegationKind,
-        id: ast::NodeId,
-    ) -> rustc_hir::Delegation {
+    fn lower_delegation_kind(&mut self, d: DelegationKind) -> rustc_hir::Delegation {
         match d {
             DelegationKind::None => rustc_hir::Delegation::None,
             DelegationKind::Proxy => rustc_hir::Delegation::Proxy,

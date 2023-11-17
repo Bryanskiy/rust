@@ -31,18 +31,21 @@ pub fn provide(providers: &mut Providers) {
     *providers = Providers { variances_of, crate_variances, ..*providers };
 }
 
-fn crate_variances(tcx: TyCtxt<'_>, (): ()) -> CrateVariancesMap<'_> {
+fn crate_variances(tcx: TyCtxt<'_>, skip_delegation: bool) -> CrateVariancesMap<'_> {
     let arena = DroplessArena::default();
-    let terms_cx = terms::determine_parameters_to_be_inferred(tcx, &arena);
-    let constraints_cx = constraints::add_constraints_from_crate(terms_cx);
+    let terms_cx = terms::determine_parameters_to_be_inferred(tcx, &arena, skip_delegation);
+    let constraints_cx = constraints::add_constraints_from_crate(terms_cx, skip_delegation);
     solve::solve_constraints(constraints_cx)
 }
 
 fn variances_of(tcx: TyCtxt<'_>, item_def_id: LocalDefId) -> &[ty::Variance] {
     // Skip items with no generics - there's nothing to infer in them.
-    if tcx.generics_of(item_def_id).count() == 0 {
-        return &[];
-    }
+    let skip_delegation =
+        if let rustc_hir::Delegation::Gen { .. } = tcx.delegation_kind(item_def_id) {
+            false
+        } else {
+            true
+        };
 
     match tcx.def_kind(item_def_id) {
         DefKind::Fn
@@ -53,7 +56,7 @@ fn variances_of(tcx: TyCtxt<'_>, item_def_id: LocalDefId) -> &[ty::Variance] {
         | DefKind::Variant
         | DefKind::Ctor(..) => {
             // These are inferred.
-            let crate_map = tcx.crate_variances(());
+            let crate_map = tcx.crate_variances(skip_delegation);
             return crate_map.variances.get(&item_def_id.to_def_id()).copied().unwrap_or(&[]);
         }
         DefKind::OpaqueTy | DefKind::ImplTraitPlaceholder => {

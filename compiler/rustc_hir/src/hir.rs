@@ -2692,6 +2692,7 @@ pub enum OpaqueTyOrigin {
 /// The various kinds of types recognized by the compiler.
 #[derive(Debug, Clone, Copy, HashStable_Generic)]
 pub enum TyKind<'hir> {
+    // InheritedFromOtherFn(DefId /* callee */, usize /* param index in calle */),
     /// A variable length slice (i.e., `[T]`).
     Slice(&'hir Ty<'hir>),
     /// A fixed length array (i.e., `[T; n]`).

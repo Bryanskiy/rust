@@ -876,7 +876,10 @@ impl<'a, 'tcx> SubstFolder<'a, 'tcx> {
         let ty = match opt_ty {
             Some(GenericArgKind::Type(ty)) => ty,
             Some(kind) => self.type_param_expected(p, source_ty, kind),
-            None => self.type_param_out_of_range(p, source_ty),
+            None => {
+                println!("p index: {:?}", p.index);
+                self.type_param_out_of_range(p, source_ty)
+            }
         };
 
         self.shift_vars_through_binders(ty)

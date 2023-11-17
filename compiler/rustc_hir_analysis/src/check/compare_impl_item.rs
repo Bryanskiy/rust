@@ -183,18 +183,14 @@ fn compare_method_predicate_entailment<'tcx>(
 
     // Create mapping from impl to placeholder.
     let impl_to_placeholder_substs = InternalSubsts::identity_for_item(tcx, impl_m.def_id);
-    println!("impl_to_placeholder_substs: {:?}", impl_to_placeholder_substs);
 
     // Create mapping from trait to placeholder.
     let trait_to_placeholder_substs =
         impl_to_placeholder_substs.rebase_onto(tcx, impl_m.container_id(tcx), trait_to_impl_substs);
     debug!("compare_impl_method: trait_to_placeholder_substs={:?}", trait_to_placeholder_substs);
-    println!("trait_to_placeholder_substs: {:?}", trait_to_placeholder_substs);
 
     let impl_m_predicates = tcx.predicates_of(impl_m.def_id);
     let trait_m_predicates = tcx.predicates_of(trait_m.def_id);
-    println!("impl_m_predicates: {:?}", impl_m_predicates);
-    println!("trait_m_predicates: {:?}", trait_m_predicates);
 
     // Create obligations for each predicate declared by the impl
     // definition in the context of the trait's parameter
@@ -202,9 +198,7 @@ fn compare_method_predicate_entailment<'tcx>(
     // however, because we want to replace all late-bound regions with
     // region variables.
     let impl_predicates = tcx.predicates_of(impl_m_predicates.parent.unwrap());
-    println!("impl_predicates: {:?}", impl_predicates);
     let mut hybrid_preds = impl_predicates.instantiate_identity(tcx);
-    println!("hybrid_preds: {:?}", hybrid_preds);
 
     debug!("compare_impl_method: impl_bounds={:?}", hybrid_preds);
 
@@ -1180,7 +1174,7 @@ fn extract_spans_for_error_reporting<'tcx>(
     trait_m: ty::AssocItem,
 ) -> (Span, Option<Span>) {
     let tcx = infcx.tcx;
-    let mut impl_args = {
+    let impl_args = {
         let (sig, _) = tcx.hir().expect_impl_item(impl_m.def_id.expect_local()).expect_fn();
         sig.decl.inputs.iter().map(|t| t.span).chain(iter::once(sig.decl.output.span()))
     };
@@ -1191,8 +1185,13 @@ fn extract_spans_for_error_reporting<'tcx>(
     });
 
     match terr {
-        TypeError::ArgumentMutability(i) | TypeError::ArgumentSorts(ExpectedFound { .. }, i) => {
-            (impl_args.nth(i).unwrap(), trait_args.and_then(|mut args| args.nth(i)))
+        TypeError::ArgumentMutability(_i) | TypeError::ArgumentSorts(ExpectedFound { .. }, _i) => {
+            // (impl_args.nth(i).unwrap(), trait_args.and_then(|mut args| args.nth(i)))
+            println!("impl_args: {:?}", impl_args);
+            println!("trait_args: {:?}", trait_args);
+            println!("cause: {:?}", cause);
+
+            (cause.span(), tcx.hir().span_if_local(trait_m.def_id))
         }
         _ => (cause.span(), tcx.hir().span_if_local(trait_m.def_id)),
     }

@@ -18,7 +18,6 @@ use crate::astconv::AstConv;
 use crate::check::intrinsic::intrinsic_operation_unsafety;
 use crate::errors;
 use hir::def::DefKind;
-use hir::Delegation;
 use rustc_data_structures::captures::Captures;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_errors::{Applicability, DiagnosticBuilder, ErrorGuaranteed, StashKey};
@@ -1360,6 +1359,10 @@ fn impl_trait_ref(
     tcx: TyCtxt<'_>,
     def_id: LocalDefId,
 ) -> Option<ty::EarlyBinder<ty::TraitRef<'_>>> {
+    // if let hir::Delegation::Gen { .. } = tcx.delegation_kind(def_id) {
+    //     return tcx.delegate(def_id).impl_trait_ref;
+    // }
+
     let icx = ItemCtxt::new(tcx, def_id);
     let impl_ = tcx.hir().expect_item(def_id).expect_impl();
     impl_

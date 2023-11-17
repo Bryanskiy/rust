@@ -1,7 +1,6 @@
 use crate::expand::AstFragment;
 use ast::{
-    AssocItem, Block, BlockCheckMode, Defaultness, Delegation, Fn, FnSig, Generics, Stmt, StmtKind,
-    Ty, Visibility,
+    Block, BlockCheckMode, Defaultness, Delegation, Fn, FnSig, Generics, Stmt, StmtKind, Ty,
 };
 use rustc_ast as ast;
 use rustc_ast::mut_visit::*;

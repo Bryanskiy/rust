@@ -982,7 +982,7 @@ impl<'tcx> Cx<'tcx> {
         }
     }
 
-    fn generate_var(&mut self, hir_id: hir::HirId, ty: ty::Ty<'tcx>) -> ExprId {
+    fn generate_var(&mut self, hir_id: hir::HirId, ty: Ty<'tcx>) -> ExprId {
         let kind = self.convert_var(hir_id);
         let expr = Expr { temp_lifetime: None, ty, span: DUMMY_SP, kind };
         self.thir.exprs.push(expr)

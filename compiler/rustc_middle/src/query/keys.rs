@@ -152,6 +152,14 @@ impl Key for LocalDefId {
     }
 }
 
+impl Key for bool {
+    type CacheSelector = DefaultCacheSelector<Self>;
+
+    fn default_span(&self, _tcx: TyCtxt<'_>) -> Span {
+        DUMMY_SP
+    }
+}
+
 impl Key for DefId {
     type CacheSelector = DefaultCacheSelector<Self>;
 

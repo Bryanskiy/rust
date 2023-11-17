@@ -17,9 +17,8 @@ use rustc_hir::ItemLocalId;
 use rustc_hir::Node;
 use rustc_middle::middle::region;
 use rustc_middle::thir::*;
-use rustc_middle::ty::{self, RvalueScopes, TyCtxt};
-use rustc_span::def_id;
-use rustc_span::{symbol::kw, Span, Symbol, DUMMY_SP};
+use rustc_middle::ty::{self, RvalueScopes, Ty, TyCtxt};
+use rustc_span::{symbol::kw, Span, DUMMY_SP};
 
 pub(crate) fn thir_body(
     tcx: TyCtxt<'_>,
@@ -85,17 +84,16 @@ struct Cx<'tcx> {
     /// The `DefId` of the owner of this body.
     body_owner: DefId,
 
-    delegation_ctx: DelegationCtx<'tcx>,
+    delegation_ctx: DelegationCtx,
 }
 
-struct DelegationCtx<'tcx> {
+struct DelegationCtx {
     generated_hir: Vec<ItemLocalId>,
-    tcx: TyCtxt<'tcx>,
     owner: LocalDefId,
 }
 
-impl<'tcx> DelegationCtx<'tcx> {
-    fn new(tcx: TyCtxt<'tcx>, owner: LocalDefId) -> Self {
+impl DelegationCtx {
+    fn new<'tcx>(tcx: TyCtxt<'tcx>, owner: LocalDefId) -> Self {
         struct FindMax {
             local_def_id: ItemLocalId,
         }
@@ -110,7 +108,7 @@ impl<'tcx> DelegationCtx<'tcx> {
         let body = tcx.hir().body(tcx.hir().body_owned_by(owner));
         intravisit::walk_body(&mut vis, body);
 
-        Self { tcx, owner, generated_hir: vec![vis.local_def_id] }
+        Self { owner, generated_hir: vec![vis.local_def_id] }
     }
 
     #[must_use]
@@ -124,17 +122,18 @@ impl<'tcx> DelegationCtx<'tcx> {
         hir_id
     }
 
-    fn mk_pat(&mut self, ty: ty::Ty<'tcx>, idx: usize) -> Box<Pat<'tcx>> {
+    fn mk_pat<'tcx>(&mut self, ty: Ty<'tcx>, idx: usize) -> Box<Pat<'tcx>> {
         let mut hir_id = HirId::make_owner(self.owner);
         hir_id.local_id = self.generated_hir[idx + 1];
 
+        // inherit pattern from callee
         let pat = Pat {
             ty,
             span: DUMMY_SP,
             kind: PatKind::Binding {
                 mutability: rustc_ast::ast::Mutability::Not,
                 name: kw::Empty,
-                mode: BindingMode::ByValue, // todo
+                mode: BindingMode::ByValue,
                 var: LocalVarId(hir_id),
                 ty,
                 subpattern: None,

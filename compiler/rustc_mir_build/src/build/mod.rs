@@ -1,6 +1,5 @@
 use crate::build::expr::as_place::PlaceBuilder;
 use crate::build::scope::DropKind;
-use hir::HirId;
 use rustc_apfloat::ieee::{Double, Single};
 use rustc_apfloat::Float;
 use rustc_ast::attr;

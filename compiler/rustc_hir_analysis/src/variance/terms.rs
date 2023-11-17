@@ -64,6 +64,7 @@ pub struct TermsContext<'a, 'tcx> {
 pub fn determine_parameters_to_be_inferred<'a, 'tcx>(
     tcx: TyCtxt<'tcx>,
     arena: &'a DroplessArena,
+    skip_delegation: bool,
 ) -> TermsContext<'a, 'tcx> {
     let mut terms_cx = TermsContext {
         tcx,
@@ -81,6 +82,10 @@ pub fn determine_parameters_to_be_inferred<'a, 'tcx>(
     let crate_items = tcx.hir_crate_items(());
 
     for def_id in crate_items.definitions() {
+        if skip_delegation && let rustc_hir::Delegation::Gen { .. } = tcx.delegation_kind(def_id) {
+            continue;
+        }
+
         debug!("add_inferreds for item {:?}", def_id);
 
         let def_kind = tcx.def_kind(def_id);

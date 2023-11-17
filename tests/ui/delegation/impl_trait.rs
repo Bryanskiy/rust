@@ -25,7 +25,7 @@ mod simple {
     }
 }
 
-mod generics {
+mod lifetimes {
     use std::fmt;
 
     struct ErrorTy;
@@ -43,11 +43,55 @@ mod generics {
     pub fn test() {
         assert_eq!("ErrorTy", format!("{ErrorTy}"));
     }
+}
 
-    // TODO: library/core/src/ptr/non_null.rs:765:9
+mod generic_types {
+    struct F;
+    trait Trait {
+        fn bar<T>(&self, x: T) -> T { x }
+    }
+    impl Trait for F {}
+
+    struct S(F);
+    impl Trait for S {
+        override bar { self.0 }
+    }
+
+    pub fn test() {
+        let s = S(F);
+        assert_eq!(42, s.bar(42));
+    }
+}
+
+mod predicates {
+    use std::hash;
+
+    pub struct NonNull<T: ?Sized> {
+        pointer: *const T,
+    }
+
+    impl<T: ?Sized> NonNull<T> {
+        pub const fn as_ptr(&self) -> *mut T {
+            self.pointer as *mut T
+        }
+    }
+
+    impl<T: ?Sized> hash::Hash for NonNull<T> {
+        // fn hash<H: hash::Hasher>(&self, state: &mut H) {
+        //     self.as_ptr().hash(state)
+        // }
+
+        override hash { self.as_ptr() }
+    }
+
+    pub fn test() {
+        // todo
+    }
 }
 
 fn main() {
     simple::test();
-    generics::test();
+    lifetimes::test();
+    generic_types::test();
+    predicates::test();
 }

@@ -1018,6 +1018,26 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         Ok(if let Err(guar) = expr_ty.error_reported() { self.tcx.ty_error(guar) } else { target })
     }
 
+    // same as `try_coerce`, but without hir info
+    pub fn try_ty_coerce(
+        &self,
+        expr_ty: Ty<'tcx>,
+        target: Ty<'tcx>,
+        allow_two_phase: AllowTwoPhase,
+        cause: Option<ObligationCause<'tcx>>,
+    ) -> RelateResult<'tcx, Ty<'tcx>> {
+        let source = self.resolve_vars_with_obligations(expr_ty);
+        debug!("coercion::try({:?} -> {:?})", source, target);
+
+        let cause = cause.unwrap_or_else(|| {
+            self.cause(rustc_span::DUMMY_SP, ObligationCauseCode::ExprAssignable)
+        });
+        let coerce = Coerce::new(self, cause, allow_two_phase);
+        let ok = self.commit_if_ok(|_| coerce.coerce(source, target))?;
+        let (_, _) = self.register_infer_ok_obligations(ok);
+        Ok(if let Err(guar) = expr_ty.error_reported() { self.tcx.ty_error(guar) } else { target })
+    }
+
     /// Same as `try_coerce()`, but without side-effects.
     ///
     /// Returns false if the coercion creates any obligations that result in

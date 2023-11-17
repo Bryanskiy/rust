@@ -51,7 +51,6 @@ pub use inherited::Inherited;
 
 use crate::check::check_fn;
 use crate::coercion::DynamicCoerceMany;
-use crate::delegate::delegation_kind;
 use crate::diverges::Diverges;
 use crate::expectation::Expectation;
 use crate::fn_ctxt::RawTy;

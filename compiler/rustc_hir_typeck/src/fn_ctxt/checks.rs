@@ -364,6 +364,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                     continue;
                 }
 
+                // generated callee's don't have args
                 if self.tcx.delegation_kind(self.item_def_id()) != hir::Delegation::None
                     && matches!(arg.kind, ExprKind::Underscore)
                 {
@@ -391,6 +392,32 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
 
                 if !is_compatible {
                     call_appears_satisfied = false;
+                }
+            }
+        }
+
+        // same as in normals args checks, except hir info
+        if let hir::Delegation::Gen { .. } = self.tcx.delegation_kind(self.item_def_id()) &&
+        provided_args.len() == 1 &&
+        matches!(provided_args[0].kind, ExprKind::Underscore) {
+            let ty = self.check_expr(&provided_args[0]);
+            let ty::Tuple(list) = ty.kind() else {
+                bug!()
+            };
+            for (idx, arg_ty) in list.iter().enumerate() {
+                let expected_input_ty: Ty<'tcx> = expected_input_tys[idx];
+                let formal_input_ty: Ty<'tcx> = formal_input_tys[idx];
+
+                let expectation = Expectation::rvalue_hint(self, expected_input_ty);
+                let coerced_ty = expectation.only_has_type(self).unwrap_or(formal_input_ty);
+                let coerced_ty = self.resolve_vars_with_obligations(coerced_ty);
+
+                let coerce_error =
+                    self.try_ty_coerce(arg_ty, coerced_ty, AllowTwoPhase::Yes, None).err();
+
+                if coerce_error.is_some() {
+                    call_appears_satisfied = false;
+                    break;
                 }
             }
         }
