@@ -18,6 +18,7 @@ pub mod cast;
 mod check;
 mod closure;
 mod coercion;
+mod delegation;
 mod demand;
 mod diverges;
 mod errors;
@@ -39,6 +40,7 @@ mod upvar;
 mod writeback;
 
 pub use coercion::can_coerce;
+use delegation::resolve_delegation;
 use fn_ctxt::FnCtxt;
 use typeck_root_ctxt::TypeckRootCtxt;
 
@@ -409,5 +411,5 @@ fn fatally_break_rust(tcx: TyCtxt<'_>, span: Span) -> ! {
 
 pub fn provide(providers: &mut Providers) {
     method::provide(providers);
-    *providers = Providers { typeck, diagnostic_only_typeck, used_trait_imports, ..*providers };
+    *providers = Providers { typeck, diagnostic_only_typeck, used_trait_imports, resolve_delegation, ..*providers };
 }
