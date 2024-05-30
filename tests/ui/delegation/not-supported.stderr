@@ -1,4 +1,4 @@
-error: delegation with early bound generics is not supported yet
+error: early bound generics are not supported for associated delegation items is not supported yet
   --> $DIR/not-supported.rs:16:29
    |
 LL |         fn bar(&self, x: T) -> T { x }
@@ -7,7 +7,7 @@ LL |         fn bar(&self, x: T) -> T { x }
 LL |         reuse GenericTrait::bar;
    |                             ^^^
 
-error: delegation with early bound generics is not supported yet
+error: early bound generics are not supported for associated delegation items is not supported yet
   --> $DIR/not-supported.rs:18:29
    |
 LL |         fn bar1() {}
@@ -16,7 +16,7 @@ LL |         fn bar1() {}
 LL |         reuse GenericTrait::bar1;
    |                             ^^^^
 
-error: delegation with early bound generics is not supported yet
+error: early bound generics are not supported for associated delegation items is not supported yet
   --> $DIR/not-supported.rs:29:39
    |
 LL |         fn bar(&self, x: T) -> T { x }
@@ -25,7 +25,7 @@ LL |         fn bar(&self, x: T) -> T { x }
 LL |         reuse <F as GenericTrait<T>>::bar { &self.0 }
    |                                       ^^^
 
-error: delegation with early bound generics is not supported yet
+error: early bound generics are not supported for associated delegation items is not supported yet
   --> $DIR/not-supported.rs:31:34
    |
 LL |         fn bar1() {}
@@ -34,7 +34,7 @@ LL |         fn bar1() {}
 LL |         reuse GenericTrait::<T>::bar1;
    |                                  ^^^^
 
-error: delegation with early bound generics is not supported yet
+error: early bound generics are not supported for associated delegation items is not supported yet
   --> $DIR/not-supported.rs:36:29
    |
 LL |         fn bar(&self, x: T) -> T { x }
@@ -43,7 +43,7 @@ LL |         fn bar(&self, x: T) -> T { x }
 LL |         reuse GenericTrait::bar { &F }
    |                             ^^^
 
-error: delegation with early bound generics is not supported yet
+error: early bound generics are not supported for associated delegation items is not supported yet
   --> $DIR/not-supported.rs:38:29
    |
 LL |         fn bar1() {}
@@ -52,7 +52,7 @@ LL |         fn bar1() {}
 LL |         reuse GenericTrait::bar1;
    |                             ^^^^
 
-error: delegation with early bound generics is not supported yet
+error: early bound generics are not supported for associated delegation items is not supported yet
   --> $DIR/not-supported.rs:43:22
    |
 LL |         fn foo(&self, x: i32) -> i32 { x }
@@ -70,7 +70,7 @@ LL |         fn foo2<T>(&self, x: T) -> T { x }
 LL |         reuse Trait::foo2 { &self.0 }
    |                      ^^^^ found 0 type parameters
 
-error: delegation with early bound generics is not supported yet
+error: early bound generics are not supported for associated delegation items is not supported yet
   --> $DIR/not-supported.rs:52:29
    |
 LL |         fn foo3<'a: 'a>(_: &'a u32) {}
@@ -88,7 +88,7 @@ LL |         fn foo3<'a: 'a>(_: &'a u32) {}
 LL |         reuse <F as Trait>::foo3;
    |                             ^^^^ lifetimes do not match method in trait
 
-error: delegation with early bound generics is not supported yet
+error: early bound generics are not supported for associated delegation items is not supported yet
   --> $DIR/not-supported.rs:59:22
    |
 LL |         fn foo(&self, x: i32) -> i32 { x }
@@ -97,7 +97,7 @@ LL |         fn foo(&self, x: i32) -> i32 { x }
 LL |         reuse Trait::foo { &self.0 }
    |                      ^^^
 
-error: delegation with early bound generics is not supported yet
+error: early bound generics are not supported for associated delegation items is not supported yet
   --> $DIR/not-supported.rs:49:22
    |
 LL |         fn foo2<T>(&self, x: T) -> T { x }
