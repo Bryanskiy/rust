@@ -38,7 +38,7 @@
 
 use crate::{ImplTraitPosition, ResolverAstLoweringExt};
 
-use super::{ImplTraitContext, LoweringContext, ParamMode};
+use super::{ImplTraitContext, LoweringContext, ParamMode, ParenthesizedGenericArgs};
 
 use ast::visit::Visitor;
 use hir::def::{DefKind, PartialRes, Res};
@@ -245,12 +245,13 @@ impl<'hir> LoweringContext<'_, 'hir> {
         self.lower_body(|this| {
             let mut parameters: Vec<hir::Param<'_>> = Vec::with_capacity(param_count);
             let mut args: Vec<hir::Expr<'_>> = Vec::with_capacity(param_count);
+            let mut target_expr = None;
 
             for idx in 0..param_count {
                 let (param, pat_node_id) = this.generate_param(span);
                 parameters.push(param);
 
-                let arg = if let Some(block) = block
+                if let Some(block) = block
                     && idx == 0
                 {
                     let mut self_resolver = SelfResolver {
@@ -259,44 +260,105 @@ impl<'hir> LoweringContext<'_, 'hir> {
                         self_param_id: pat_node_id,
                     };
                     self_resolver.visit_block(block);
-                    let block = this.lower_block(block, false);
-                    this.mk_expr(hir::ExprKind::Block(block, None), block.span)
+                    let mut block = this.lower_block_noalloc(block, false);
+                    if block.expr.is_none() {
+                        let pat_hir_id = this.lower_node_id(pat_node_id);
+                        let arg = &*this.arena.alloc(this.generate_arg(pat_hir_id, span));
+                        // Use `self` as a first argument if no expression is provided.
+                        block.expr = Some(arg);
+                    }
+                    target_expr = Some(block);
                 } else {
                     let pat_hir_id = this.lower_node_id(pat_node_id);
-                    this.generate_arg(pat_hir_id, span)
+                    let arg = this.generate_arg(pat_hir_id, span);
+                    args.push(arg);
                 };
-                args.push(arg);
             }
 
-            let final_expr = this.finalize_body_lowering(delegation, args, span);
+            let final_expr = this.finalize_body_lowering(delegation, target_expr, args, span);
             (this.arena.alloc_from_iter(parameters), final_expr)
         })
     }
 
-    // Generates fully qualified call for the resulting body.
+    // Generates expression for the resulting body. If possible, `MethodCall` is used
+    // instead of fully qualified call for the self type coercion.
     fn finalize_body_lowering(
         &mut self,
         delegation: &Delegation,
-        args: Vec<hir::Expr<'hir>>,
+        target_expr: Option<hir::Block<'hir>>,
+        mut args: Vec<hir::Expr<'hir>>,
         span: Span,
     ) -> hir::Expr<'hir> {
-        let path = self.lower_qpath(
-            delegation.id,
-            &delegation.qself,
-            &delegation.path,
-            ParamMode::Optional,
-            ImplTraitContext::Disallowed(ImplTraitPosition::Path),
-            None,
-        );
+        let has_generic_args =
+            delegation.path.segments.iter().rev().skip(1).any(|segment| segment.args.is_some());
 
-        let args = self.arena.alloc_from_iter(args);
-        let path_expr = self.arena.alloc(self.mk_expr(hir::ExprKind::Path(path), span));
-        let call = self.arena.alloc(self.mk_expr(hir::ExprKind::Call(path_expr, args), span));
+        let (stmts, call, block_id) = if self
+            .get_resolution_id(delegation.id, span)
+            .and_then(|def_id| Ok(self.has_self(def_id, span)))
+            .unwrap_or_default()
+            && delegation.qself.is_none()
+            && !has_generic_args
+        {
+            let ast_segment = delegation.path.segments.last().unwrap();
+            let segment = self.lower_path_segment(
+                delegation.path.span,
+                ast_segment,
+                ParamMode::Optional,
+                ParenthesizedGenericArgs::Err,
+                ImplTraitContext::Disallowed(ImplTraitPosition::Path),
+                None,
+                None,
+            );
+            let segment = self.arena.alloc(segment);
 
+            let args = &*self.arena.alloc_from_iter(args);
+            let (stmts, receiver, args, block_id) = if let Some(target_expr) = target_expr {
+                let receiver = target_expr.expr.unwrap();
+                (Some(target_expr.stmts), receiver, args, target_expr.hir_id)
+            } else {
+                (None, &args[0], &args[1..], self.next_id())
+            };
+
+            let method_call_id = self.next_id();
+            if let Some(traits) = self.resolver.trait_map.remove(&delegation.id) {
+                self.trait_map.insert(method_call_id.local_id, traits.into_boxed_slice());
+            }
+
+            let method_call = self.arena.alloc(hir::Expr {
+                hir_id: method_call_id,
+                kind: hir::ExprKind::MethodCall(segment, receiver, args, span),
+                span,
+            });
+
+            (stmts, method_call, block_id)
+        } else {
+            let path = self.lower_qpath(
+                delegation.id,
+                &delegation.qself,
+                &delegation.path,
+                ParamMode::Optional,
+                ImplTraitContext::Disallowed(ImplTraitPosition::Path),
+                None,
+            );
+
+            if let Some(target_expr) = target_expr {
+                let target_expr = self.arena.alloc(target_expr);
+                let fst_arg =
+                    self.mk_expr(hir::ExprKind::Block(target_expr, None), target_expr.span);
+                args.insert(0, fst_arg);
+            }
+
+            let args = self.arena.alloc_from_iter(args);
+            let callee_path = self.arena.alloc(self.mk_expr(hir::ExprKind::Path(path), span));
+
+            let call = self.arena.alloc(self.mk_expr(hir::ExprKind::Call(callee_path, args), span));
+
+            (None, call, self.next_id())
+        };
         let block = self.arena.alloc(hir::Block {
-            stmts: &[],
+            stmts: stmts.unwrap_or(&[]),
             expr: Some(call),
-            hir_id: self.next_id(),
+            hir_id: block_id,
             rules: hir::BlockCheckMode::DefaultBlock,
             span,
             targeted_by_break: false,

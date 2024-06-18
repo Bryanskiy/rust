@@ -1,5 +1,5 @@
 error[E0401]: can't use generic parameters from outer item
-  --> $DIR/target-expr.rs:20:17
+  --> $DIR/target-expr.rs:24:17
    |
 LL | fn bar<T: Default>(_: T) {
    |        - type parameter from outer item
@@ -10,7 +10,7 @@ LL |         let _ = T::Default();
    |                 ^^^^^^^^^^ use of generic parameter from outer item
 
 error[E0434]: can't capture dynamic environment in a fn item
-  --> $DIR/target-expr.rs:29:17
+  --> $DIR/target-expr.rs:33:17
    |
 LL |         let x = y;
    |                 ^
@@ -18,7 +18,7 @@ LL |         let x = y;
    = help: use the `|| { ... }` closure form instead
 
 error[E0424]: expected value, found module `self`
-  --> $DIR/target-expr.rs:36:5
+  --> $DIR/target-expr.rs:40:5
    |
 LL | fn main() {
    |    ---- this function can't have a `self` parameter
@@ -27,19 +27,19 @@ LL |     self.0;
    |     ^^^^ `self` value is a keyword only available in methods with a `self` parameter
 
 error[E0425]: cannot find value `x` in this scope
-  --> $DIR/target-expr.rs:38:13
+  --> $DIR/target-expr.rs:42:13
    |
 LL |     let z = x;
    |             ^
    |
 help: the binding `x` is available in a different scope in the same function
-  --> $DIR/target-expr.rs:29:13
+  --> $DIR/target-expr.rs:33:13
    |
 LL |         let x = y;
    |             ^
 
 error: delegation with early bound generics is not supported yet
-  --> $DIR/target-expr.rs:16:18
+  --> $DIR/target-expr.rs:21:18
    |
 LL |     fn static_method(x: i32) -> i32 { x }
    |     ------------------------------- callee defined here
@@ -48,7 +48,7 @@ LL |     reuse Trait::static_method {
    |                  ^^^^^^^^^^^^^
 
 error: delegation to a trait method from a free function is not supported yet
-  --> $DIR/target-expr.rs:16:18
+  --> $DIR/target-expr.rs:21:18
    |
 LL |     fn static_method(x: i32) -> i32 { x }
    |     ------------------------------- callee defined here
@@ -57,7 +57,7 @@ LL |     reuse Trait::static_method {
    |                  ^^^^^^^^^^^^^
 
 error: delegation to a trait method from a free function is not supported yet
-  --> $DIR/target-expr.rs:27:25
+  --> $DIR/target-expr.rs:31:25
    |
 LL |     fn static_method(x: i32) -> i32 { x }
    |     ------------------------------- callee defined here
@@ -65,20 +65,34 @@ LL |     fn static_method(x: i32) -> i32 { x }
 LL |     reuse <S as Trait>::static_method {
    |                         ^^^^^^^^^^^^^
 
-error[E0308]: mismatched types
-  --> $DIR/target-expr.rs:16:32
+warning: function cannot return without recursing
+  --> $DIR/target-expr.rs:13:18
    |
-LL |       reuse Trait::static_method {
-   |  ________________________________^
-LL | |
-LL | |
-LL | |
-LL | |         let _ = T::Default();
-LL | |
-LL | |     }
-   | |_____^ expected `i32`, found `()`
+LL |     reuse Trait::foo { self.0; }
+   |                  ^^^
+   |                  |
+   |                  cannot return without recursing
+   |                  recursive call site
+   |
+   = help: a `loop` may express intention better if this is on purpose
+   = note: `#[warn(unconditional_recursion)]` on by default
 
-error: aborting due to 8 previous errors
+error[E0507]: cannot move out of `` which is behind a shared reference
+  --> $DIR/target-expr.rs:13:24
+   |
+LL |     reuse Trait::foo { self.0; }
+   |                        ^^^^^^ move occurs because `.0` has type `F`, which does not implement the `Copy` trait
+   |
+note: if `F` implemented `Clone`, you could clone the value
+  --> $DIR/target-expr.rs:9:1
+   |
+LL | struct F;
+   | ^^^^^^^^ consider implementing `Clone` for this type
+...
+LL |     reuse Trait::foo { self.0; }
+   |                        ------ you could clone this value
 
-Some errors have detailed explanations: E0308, E0401, E0424, E0425, E0434.
-For more information about an error, try `rustc --explain E0308`.
+error: aborting due to 8 previous errors; 1 warning emitted
+
+Some errors have detailed explanations: E0401, E0424, E0425, E0434, E0507.
+For more information about an error, try `rustc --explain E0401`.

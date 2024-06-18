@@ -3,12 +3,17 @@
 
 trait Trait {
     fn static_method(x: i32) -> i32 { x }
+    fn foo(&self) {}
 }
 
 struct F;
 
 struct S(F);
-impl Trait for S {}
+impl Trait for S {
+    reuse Trait::foo { self.0; }
+    //~^ ERROR cannot move out of `` which is behind a shared reference
+    //~| WARN function cannot return without recursing
+}
 
 fn foo(x: i32) -> i32 { x }
 
@@ -16,7 +21,6 @@ fn bar<T: Default>(_: T) {
     reuse Trait::static_method {
     //~^ ERROR delegation to a trait method from a free function is not supported yet
     //~| ERROR delegation with early bound generics is not supported yet
-    //~| ERROR mismatched types
         let _ = T::Default();
         //~^ ERROR can't use generic parameters from outer item
     }
