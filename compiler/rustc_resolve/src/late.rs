@@ -6,9 +6,7 @@
 //! If you wonder why there's no `early.rs`, that's because it's split into three files -
 //! `build_reduced_graph.rs`, `macros.rs` and `imports.rs`.
 
-use crate::{
-    errors, path_names_to_string, rustdoc, BindingError, Finalize, LexicalScopeBinding, ModuleKind,
-};
+use crate::{errors, path_names_to_string, rustdoc, BindingError, Finalize, LexicalScopeBinding};
 use crate::{BindingKey, Used};
 use crate::{Module, ModuleOrUniformRoot, NameBinding, ParentScope, PathResult};
 use crate::{ResolutionError, Resolver, Segment, TyCtxt, UseError};
@@ -3318,7 +3316,7 @@ impl<'a: 'ast, 'b, 'ast, 'tcx> LateResolutionVisitor<'a, 'b, 'ast, 'tcx> {
             self.visit_ty(&qself.ty);
         }
         self.visit_path(&delegation.path, delegation.id);
-        let last_segment = delegation.path.segments.last().unwrap();
+        let last_ident = delegation.path.segments.last().unwrap().ident;
 
         // Saving traits for a `MethodCall` that has not yet been generated.
         // Traits found in the path are also considered visible:
@@ -3326,17 +3324,13 @@ impl<'a: 'ast, 'b, 'ast, 'tcx> LateResolutionVisitor<'a, 'b, 'ast, 'tcx> {
         // impl Trait for Type {
         //    reuse inner::TraitFoo::*; // OK, even `TraitFoo` is not in scope.
         // }
-        let mut traits = self.traits_in_scope(last_segment.ident, ValueNS);
+        let mut traits = self.traits_in_scope(last_ident, ValueNS);
         for segment in &delegation.path.segments {
-            if let Some(partial_res) = self.r.partial_res_map.get(&segment.id) {
-                let res_id = partial_res.expect_full_res().def_id();
-                let module = self.r.get_module(res_id);
-                if let Some(module) = module
-                    && let ModuleKind::Def(DefKind::Trait, ..) = module.kind
-                {
-                    let candidate = TraitCandidate { def_id: res_id, import_ids: smallvec![] };
-                    traits.push(candidate);
-                }
+            if let Some(partial_res) = self.r.partial_res_map.get(&segment.id)
+                && let Some(res_id) = partial_res.full_res().and_then(|res| res.opt_def_id())
+                && self.r.tcx.def_kind(res_id) == DefKind::Trait
+            {
+                traits.push(TraitCandidate { def_id: res_id, import_ids: smallvec![] });
             }
         }
         self.r.trait_map.insert(delegation.id, traits);
@@ -3347,7 +3341,7 @@ impl<'a: 'ast, 'b, 'ast, 'tcx> LateResolutionVisitor<'a, 'b, 'ast, 'tcx> {
                 let mut bindings = smallvec![(PatBoundCtx::Product, Default::default())];
 
                 this.fresh_binding(
-                    Ident::new(kw::SelfLower, last_segment.ident.span),
+                    Ident::new(kw::SelfLower, last_ident.span),
                     delegation.id,
                     PatternSource::FnParam,
                     &mut bindings,

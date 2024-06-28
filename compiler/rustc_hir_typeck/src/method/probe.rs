@@ -115,7 +115,7 @@ pub(crate) struct ProbeContext<'a, 'tcx> {
     ///
     /// `self.0` will automatically coerce. The difference with existing method lookup
     /// is that methods in delegation items are pre-resolved by callee path (`Trait::*`).
-    pre_resolved_method: Option<DefId>,
+    expected_def_id: Option<DefId>,
 
     /// Is this probe being done for a diagnostic? This will skip some error reporting
     /// machinery, since we don't particularly care about, for example, similarly named
@@ -304,7 +304,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         is_suggestion: IsSuggestion,
         self_ty: Ty<'tcx>,
         scope_expr_id: HirId,
-        pre_resolved_method: Option<DefId>,
+        expected_def_id: Option<DefId>,
         scope: ProbeScope,
     ) -> PickResult<'tcx> {
         self.probe_op(
@@ -315,7 +315,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
             is_suggestion,
             self_ty,
             scope_expr_id,
-            pre_resolved_method,
+            expected_def_id,
             scope,
             |probe_cx| probe_cx.pick(),
         )
@@ -361,7 +361,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         is_suggestion: IsSuggestion,
         self_ty: Ty<'tcx>,
         scope_expr_id: HirId,
-        pre_resolved_method: Option<DefId>,
+        expected_def_id: Option<DefId>,
         scope: ProbeScope,
         op: OP,
     ) -> Result<R, MethodError<'tcx>>
@@ -503,7 +503,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 &orig_values,
                 steps.steps,
                 scope_expr_id,
-                pre_resolved_method,
+                expected_def_id,
                 is_suggestion,
             );
 
@@ -599,7 +599,7 @@ impl<'a, 'tcx> ProbeContext<'a, 'tcx> {
         orig_steps_var_values: &'a OriginalQueryValues<'tcx>,
         steps: &'tcx [CandidateStep<'tcx>],
         scope_expr_id: HirId,
-        pre_resolved_method: Option<DefId>,
+        expected_def_id: Option<DefId>,
         is_suggestion: IsSuggestion,
     ) -> ProbeContext<'a, 'tcx> {
         ProbeContext {
@@ -619,7 +619,7 @@ impl<'a, 'tcx> ProbeContext<'a, 'tcx> {
             static_candidates: RefCell::new(Vec::new()),
             unsatisfied_predicates: RefCell::new(Vec::new()),
             scope_expr_id,
-            pre_resolved_method,
+            expected_def_id,
             is_suggestion,
         }
     }
@@ -1251,12 +1251,7 @@ impl<'a, 'tcx> ProbeContext<'a, 'tcx> {
         let mut applicable_candidates: Vec<_> = candidates
             .iter()
             .filter(|candidate| {
-                if let Some(res_id) = self.pre_resolved_method
-                    && candidate.item.def_id != res_id
-                {
-                    return false;
-                }
-                true
+                !matches!(self.expected_def_id, Some(def_id) if def_id != candidate.item.def_id)
             })
             .map(|probe| {
                 (probe, self.consider_probe(self_ty, probe, possibly_unsatisfied_predicates))
