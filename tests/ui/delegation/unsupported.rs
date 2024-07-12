@@ -2,29 +2,6 @@
 #![feature(fn_delegation)]
 #![allow(incomplete_features)]
 
-mod generics {
-    trait Trait0 {
-        fn bar(&self) {}
-    }
-
-    trait Trait1<T> {
-        fn foo(&self) {}
-        reuse Trait0::bar;
-        //~^ ERROR early bound generics are only supported for trait implementations and free functions
-    }
-
-    trait Trait2 {
-        reuse Trait1::foo;
-        //~^ ERROR early bound generics are only supported for trait implementations and free functions
-    }
-
-    struct S;
-    impl S {
-        reuse Trait1::foo;
-        //~^ ERROR early bound generics are only supported for trait implementations and free functions
-    }
-}
-
 mod opaque {
     trait Trait {}
     impl Trait for () {}

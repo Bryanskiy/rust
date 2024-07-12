@@ -75,11 +75,13 @@ fn fn_kind<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId) -> FnKind {
     }
 }
 
+type OwnParams = Vec<ty::GenericParamDef>;
+
 struct GenericsBuilder<'tcx> {
     tcx: TyCtxt<'tcx>,
     sig_id: DefId,
     parent: Option<DefId>,
-    own_params: Vec<ty::GenericParamDef>,
+    own_params: OwnParams,
 }
 
 impl<'tcx> GenericsBuilder<'tcx> {
@@ -118,6 +120,27 @@ impl<'tcx> GenericsBuilder<'tcx> {
         self
     }
 
+    fn process_own_params<F>(mut self, f: F) -> Self
+    where
+        F: Fn(OwnParams) -> OwnParams,
+    {
+        self.own_params = f(self.own_params);
+        self
+    }
+
+    // Lifetime parameters must be declared before type and const parameters.
+    // Therefore, When delegating from a free function to a associated function,
+    // generic parameters need to be reordered:
+    //
+    // trait Trait<'a, A> {
+    //     fn foo<'b, B>(...) {...}
+    // }
+    //
+    // reuse Trait::foo;
+    // desugaring:
+    // fn foo<'a, 'b, This: Trait<'a, A>, A, B>(...) {
+    //     Trait::foo(...)
+    // }
     fn sort(mut self) -> Self {
         self.own_params.sort_by_key(|key| key.kind.is_ty_or_const());
         self
@@ -211,19 +234,6 @@ fn create_generic_args<'tcx>(
     match (caller_kind, callee_kind) {
         (FnKind::Free, _) => {
             let args = ty::GenericArgs::identity_for_item(tcx, sig_id);
-            // Lifetime parameters must be declared before type and const parameters.
-            // Therefore, When delegating from a free function to a associated function,
-            // generic parameters need to be reordered:
-            //
-            // trait Trait<'a, A> {
-            //     fn foo<'b, B>(...) {...}
-            // }
-            //
-            // reuse Trait::foo;
-            // desugaring:
-            // fn foo<'a, 'b, This: Trait<'a, A>, A, B>(...) {
-            //     Trait::foo(...)
-            // }
             let mut remap_table: RemapTable = FxHashMap::default();
             for caller_param in &caller_generics.own_params {
                 let callee_index =
@@ -254,12 +264,26 @@ fn create_generic_args<'tcx>(
 
             tcx.mk_args_from_iter(parent_args.iter().chain(method_args))
         }
-        // only `Self` param supported here
         (FnKind::AssocInherentImpl, FnKind::AssocTrait) => {
             let parent = tcx.parent(def_id.into());
             let self_ty = tcx.type_of(parent).instantiate_identity();
             let generic_self_ty = ty::GenericArg::from(self_ty);
-            tcx.mk_args_from_iter(std::iter::once(generic_self_ty))
+
+            let mut remap_table: RemapTable = FxHashMap::default();
+            let trait_args = ty::GenericArgs::identity_for_item(tcx, sig_id);
+            let parent_count = caller_generics.parent_count as u32;
+
+            for idx in 1..callee_generics.count() {
+                remap_table.insert(idx as u32, idx as u32 + parent_count - 1);
+            }
+
+            let mut folder = IndicesFolder { tcx, remap_table: &remap_table };
+            let trait_args = trait_args.fold_with(&mut folder);
+
+            let args = std::iter::once(generic_self_ty).chain(trait_args.iter().skip(1));
+            let args = tcx.mk_args_from_iter(args);
+
+            args
         }
         // `sig_id` is taken from corresponding trait method
         (FnKind::AssocTraitImpl, _) => unreachable!(),
@@ -271,32 +295,44 @@ pub(crate) fn inherit_generics_for_delegation_item<'tcx>(
     tcx: TyCtxt<'tcx>,
     def_id: LocalDefId,
     sig_id: DefId,
-) -> Option<ty::Generics> {
+) -> ty::Generics {
     let caller_kind = fn_kind(tcx, def_id.into());
     let callee_kind = fn_kind(tcx, sig_id);
 
     let builder = GenericsBuilder::new(tcx, sig_id);
 
-    // FIXME(fn_delegation): early bound generics are only supported for trait
-    // implementations and free functions. Error will be reported in `check_constraints`.
     match (caller_kind, callee_kind) {
-        (FnKind::Free, _) => Some(builder.with_generics(sig_id).sort().reindex(0).build()),
+        (FnKind::Free, _) => builder.with_generics(sig_id).sort().reindex(0).build(),
         (FnKind::AssocTraitImpl, FnKind::AssocTrait) => {
             let parent = tcx.parent(def_id.into());
             let parent_generics = tcx.generics_of(parent);
             let parent_count = parent_generics.count();
 
-            Some(
-                builder
-                    .with_parent(parent)
-                    .with_own_generics(sig_id)
-                    .reindex(parent_count as u32)
-                    .build(),
-            )
+            builder
+            .with_parent(parent)
+            .with_own_generics(sig_id)
+            .reindex(parent_count as u32)
+            .build()
         }
-        // `sig_id` is taken from corresponding trait method
-        (FnKind::AssocTraitImpl, _) => unreachable!(),
-        _ => None,
+        (FnKind::AssocInherentImpl, FnKind::AssocTrait)
+        | (FnKind::AssocTrait, FnKind::AssocTrait)
+        | (_, FnKind::Free) => {
+            let parent = tcx.parent(def_id.into());
+            let parent_generics = tcx.generics_of(parent);
+            let parent_count = parent_generics.count();
+
+            builder
+            .with_parent(parent)
+            .with_generics(sig_id)
+            .process_own_params(|params| params.iter().skip(1).cloned().collect_vec() )
+            .reindex(parent_count as u32)
+            .build()
+        }
+        // `sig_id` is taken from corresponding trait method.
+        (FnKind::AssocTraitImpl, _) |
+        (_, FnKind::AssocTraitImpl) |
+        // delegation to inherent methods is not yet supported
+        (_, FnKind::AssocInherentImpl) => unreachable!(),
     }
 }
 
@@ -304,30 +340,37 @@ pub(crate) fn inherit_predicates_for_delegation_item<'tcx>(
     tcx: TyCtxt<'tcx>,
     def_id: LocalDefId,
     sig_id: DefId,
-) -> Option<ty::GenericPredicates<'tcx>> {
+) -> ty::GenericPredicates<'tcx> {
     let args = create_generic_args(tcx, def_id, sig_id);
     let builder = PredicatesBuilder::new(tcx, args);
 
     let caller_kind = fn_kind(tcx, def_id.into());
     let callee_kind = fn_kind(tcx, sig_id);
-    // FIXME(fn_delegation): early bound generics are only supported for trait
-    // implementations and free functions. Error was reported in `check_constraints`.
     match (caller_kind, callee_kind) {
         (FnKind::Free, _) => {
-            Some(builder.with_preds(|sig_id| tcx.predicates_of(sig_id), sig_id).build())
+            builder.with_preds(|sig_id| tcx.predicates_of(sig_id), sig_id).build()
         }
         (FnKind::AssocTraitImpl, FnKind::AssocTrait) => {
             let parent = tcx.parent(def_id.into());
-            Some(
-                builder
-                    .with_parent(parent)
-                    .with_own_preds(|sig_id| tcx.predicates_of(sig_id), sig_id)
-                    .build(),
-            )
+            builder
+            .with_parent(parent)
+            .with_own_preds(|sig_id| tcx.predicates_of(sig_id), sig_id)
+            .build()
         }
-        // `sig_id` is taken from corresponding trait method
-        (FnKind::AssocTraitImpl, _) => unreachable!(),
-        _ => None,
+        (FnKind::AssocInherentImpl, FnKind::AssocTrait)
+        | (FnKind::AssocTrait, FnKind::AssocTrait)
+        | (_, FnKind::Free) => {
+            let parent = tcx.parent(def_id.into());
+            builder
+                .with_parent(parent)
+                .with_preds(|sig_id| tcx.explicit_predicates_of(sig_id), sig_id)
+                .build()
+        }
+        // `sig_id` is taken from corresponding trait method.
+        (FnKind::AssocTraitImpl, _) |
+        (_, FnKind::AssocTraitImpl) |
+        // delegation to inherent methods is not yet supported
+        (_, FnKind::AssocInherentImpl) => unreachable!(),
     }
 }
 
@@ -348,33 +391,6 @@ fn check_constraints<'tcx>(tcx: TyCtxt<'tcx>, def_id: LocalDefId) -> Result<(), 
         && tcx.hir().opt_delegation_sig_id(local_sig_id).is_some()
     {
         emit("recursive delegation is not supported yet");
-    }
-
-    let caller_kind = fn_kind(tcx, def_id.into());
-    let callee_kind = fn_kind(tcx, sig_id);
-
-    match (caller_kind, callee_kind) {
-        (FnKind::Free, _) | (FnKind::AssocTraitImpl, FnKind::AssocTrait) => {}
-        // `sig_id` is taken from corresponding trait method
-        (FnKind::AssocTraitImpl, _) => {
-            return Err(tcx
-                .dcx()
-                .span_delayed_bug(span, "unexpected callee path resolution in delegation item"));
-        }
-        _ => {
-            let sig_generics = tcx.generics_of(sig_id);
-            let parent = tcx.parent(def_id.into());
-            let parent_generics = tcx.generics_of(parent);
-
-            let sig_has_self = sig_generics.has_self as usize;
-            let parent_has_self = parent_generics.has_self as usize;
-
-            if sig_generics.count() > sig_has_self || parent_generics.count() > parent_has_self {
-                emit(
-                    "early bound generics are only supported for trait implementations and free functions",
-                );
-            }
-        }
     }
 
     ret
