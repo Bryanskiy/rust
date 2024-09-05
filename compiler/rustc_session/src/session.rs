@@ -133,6 +133,7 @@ pub struct CompilerIO {
     pub input: Input,
     pub output_dir: Option<PathBuf>,
     pub output_file: Option<OutFileName>,
+    // TODO: should it be in `temps_dir`?
     pub temps_dir: Option<PathBuf>,
 }
 

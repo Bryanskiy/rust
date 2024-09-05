@@ -143,6 +143,9 @@ pub fn filename_for_input(
         CrateType::Rlib => {
             OutFileName::Real(outputs.out_directory.join(&format!("lib{libname}.rlib")))
         }
+        CrateType::Rdylib => {
+            OutFileName::Real(outputs.out_directory.join(&format!("lib{libname}.rdylib")))
+        }
         CrateType::Cdylib | CrateType::ProcMacro | CrateType::Dylib => {
             let (prefix, suffix) = (&sess.target.dll_prefix, &sess.target.dll_suffix);
             OutFileName::Real(outputs.out_directory.join(&format!("{prefix}{libname}{suffix}")))
@@ -212,6 +215,7 @@ pub const CRATE_TYPES: &[(Symbol, CrateType)] = &[
     (sym::staticlib, CrateType::Staticlib),
     (sym::proc_dash_macro, CrateType::ProcMacro),
     (sym::bin, CrateType::Executable),
+    (sym::rdylib, CrateType::Rdylib),
 ];
 
 pub fn categorize_crate_type(s: Symbol) -> Option<CrateType> {

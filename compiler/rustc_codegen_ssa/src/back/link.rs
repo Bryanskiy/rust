@@ -2070,6 +2070,8 @@ fn add_linked_symbol_object(
 
 /// Add object files containing code from the current crate.
 fn add_local_crate_regular_objects(cmd: &mut dyn Linker, codegen_results: &CodegenResults) {
+    println!("add_local_crate_regular_objects: {:?}", codegen_results.modules);
+
     for obj in codegen_results.modules.iter().filter_map(|m| m.object.as_ref()) {
         cmd.add_object(obj);
     }
@@ -2088,6 +2090,7 @@ fn add_local_crate_metadata_objects(
     crate_type: CrateType,
     codegen_results: &CodegenResults,
 ) {
+    println!("add_local_crate_metadata_objects: {:?}", codegen_results.metadata_module);
     // When linking a dynamic library, we put the metadata into a section of the
     // executable. This metadata is in a separate object file from the main
     // object file, so we link that in here.
@@ -2726,6 +2729,7 @@ fn add_upstream_rust_crates(
                     || codegen_results.crate_info.profiler_runtime == Some(cnum));
 
         let mut bundled_libs = Default::default();
+
         match linkage {
             Linkage::Static | Linkage::IncludedFromDylib | Linkage::NotLinked => {
                 if link_static_crate {
@@ -2746,7 +2750,8 @@ fn add_upstream_rust_crates(
             }
             Linkage::Dynamic => {
                 let src = &codegen_results.crate_info.used_crate_source[&cnum];
-                add_dynamic_crate(cmd, sess, &src.dylib.as_ref().unwrap().0);
+                let source = &src.dylib.as_ref().unwrap_or_else(|| src.rdylib.as_ref().unwrap()).0;
+                add_dynamic_crate(cmd, sess, source);
             }
         }
 

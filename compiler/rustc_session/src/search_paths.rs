@@ -30,6 +30,7 @@ pub struct SearchPathFile {
     pub file_name_str: String,
 }
 
+// TODO: add interface kind?
 #[derive(PartialEq, Clone, Copy, Debug, Hash, Eq, Encodable, Decodable, HashStable_Generic)]
 pub enum PathKind {
     Native,

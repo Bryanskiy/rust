@@ -197,12 +197,13 @@ fn write_or_print(out: &str, sess: &Session) {
 
 // Extra data for pretty-printing, the form of which depends on what kind of
 // pretty-printing we are doing.
-pub enum PrintExtra<'tcx> {
+pub enum PrintExtra<'tcx, 'a> {
     AfterParsing { krate: &'tcx ast::Crate },
     NeedsAstMap { tcx: TyCtxt<'tcx> },
+    Interface { krate: &'a ast::Crate, tcx: TyCtxt<'tcx> },
 }
 
-impl<'tcx> PrintExtra<'tcx> {
+impl<'tcx> PrintExtra<'tcx, '_> {
     fn with_krate<F, R>(&self, f: F) -> R
     where
         F: FnOnce(&ast::Crate) -> R,
@@ -210,6 +211,7 @@ impl<'tcx> PrintExtra<'tcx> {
         match self {
             PrintExtra::AfterParsing { krate, .. } => f(krate),
             PrintExtra::NeedsAstMap { tcx } => f(&tcx.resolver_for_lowering().borrow().1),
+            PrintExtra::Interface { krate, tcx: _ } => f(krate),
         }
     }
 
@@ -217,11 +219,12 @@ impl<'tcx> PrintExtra<'tcx> {
         match self {
             PrintExtra::AfterParsing { .. } => bug!("PrintExtra::tcx"),
             PrintExtra::NeedsAstMap { tcx } => *tcx,
+            PrintExtra::Interface { krate: _, tcx } => *tcx,
         }
     }
 }
 
-pub fn print<'tcx>(sess: &Session, ppm: PpMode, ex: PrintExtra<'tcx>) {
+pub fn print<'tcx>(sess: &Session, ppm: PpMode, ex: PrintExtra<'tcx, '_>) {
     if ppm.needs_analysis() {
         if ex.tcx().analysis(()).is_err() {
             FatalError.raise();
@@ -242,7 +245,7 @@ pub fn print<'tcx>(sess: &Session, ppm: PpMode, ex: PrintExtra<'tcx>) {
             };
             let psess = &sess.psess;
             let is_expanded = ppm.needs_ast_map();
-            ex.with_krate(|krate| {
+            let out = ex.with_krate(|krate| {
                 pprust_ast::print_crate(
                     sess.source_map(),
                     krate,
@@ -253,7 +256,14 @@ pub fn print<'tcx>(sess: &Session, ppm: PpMode, ex: PrintExtra<'tcx>) {
                     psess.edition,
                     &sess.psess.attr_id_generator,
                 )
-            })
+            });
+            if let PrintExtra::Interface { krate: _, tcx } = ex {
+                assert!(matches!(ppm, PpMode::Source(PpSourceMode::Normal)));
+                let outs = tcx.output_filenames(());
+                outs.interface_path().overwrite(&out, sess);
+                return;
+            };
+            out
         }
         AstTree => {
             debug!("pretty printing AST tree");

@@ -1664,6 +1664,8 @@ impl<'tcx> TyCtxt<'tcx> {
                     MetadataKind::None
                 }
                 CrateType::Rlib => MetadataKind::Uncompressed,
+                // TODO: what exactly should be here?
+                CrateType::Rdylib => MetadataKind::Uncompressed,
                 CrateType::Dylib | CrateType::ProcMacro => MetadataKind::Compressed,
             })
             .max()
@@ -1929,6 +1931,9 @@ impl<'tcx> TyCtxt<'tcx> {
                 // but we must fix rust-lang/rust#65890 before we can
                 // do that robustly.
                 CrateType::Dylib => true,
+
+                // TODO
+                CrateType::Rdylib => true,
 
                 CrateType::Rlib => true,
             }

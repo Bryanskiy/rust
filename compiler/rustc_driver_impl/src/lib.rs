@@ -311,6 +311,7 @@ fn run_compiler(
     }
 
     let (odir, ofile) = make_output(&matches);
+
     let mut config = interface::Config {
         opts: sopts,
         crate_cfg: matches.opt_strs("cfg"),
@@ -448,6 +449,18 @@ fn run_compiler(
             if sess.opts.unstable_opts.no_analysis {
                 return early_exit();
             }
+
+            queries.global_ctxt()?.enter(|tcx| {
+                if tcx.crate_types().contains(&rustc_session::config::CrateType::Rdylib) {
+                    let krate = &*tcx.resolver_for_lowering().borrow();
+                    let interface = rustc_metadata::rdylib::gen_crate(&krate.1);
+                    pretty::print(
+                        sess,
+                        config::PpMode::Source(config::PpSourceMode::Normal),
+                        pretty::PrintExtra::Interface { krate: &interface, tcx },
+                    );
+                }
+            });
 
             queries.global_ctxt()?.enter(|tcx| tcx.analysis(()))?;
 

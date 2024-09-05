@@ -9,6 +9,7 @@ bitflags = "2.4.1"
 libloading = "0.8.0"
 odht = { version = "0.3.1", features = ["nightly"] }
 rustc_ast = { path = "../rustc_ast" }
+rustc_ast_pretty = { path = "../rustc_ast_pretty" }
 rustc_attr = { path = "../rustc_attr" }
 rustc_data_structures = { path = "../rustc_data_structures" }
 rustc_errors = { path = "../rustc_errors" }
@@ -27,6 +28,7 @@ rustc_span = { path = "../rustc_span" }
 rustc_target = { path = "../rustc_target" }
 rustc_type_ir = { path = "../rustc_type_ir" }
 snap = "1"
+thin-vec = "0.2.12"
 tempfile = "3.2"
 tracing = "0.1"
 # tidy-alphabetical-end

@@ -220,7 +220,7 @@ use std::{cmp, fmt};
 
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_data_structures::memmap::Mmap;
-use rustc_data_structures::owned_slice::slice_owned;
+use rustc_data_structures::owned_slice::{slice_owned, OwnedSlice};
 use rustc_data_structures::svh::Svh;
 use rustc_errors::{DiagArgValue, IntoDiagArg};
 use rustc_fs_util::try_canonicalize;
@@ -278,6 +278,7 @@ pub(crate) enum CrateFlavor {
     Rlib,
     Rmeta,
     Dylib,
+    Rdylib,
 }
 
 impl fmt::Display for CrateFlavor {
@@ -286,6 +287,7 @@ impl fmt::Display for CrateFlavor {
             CrateFlavor::Rlib => "rlib",
             CrateFlavor::Rmeta => "rmeta",
             CrateFlavor::Dylib => "dylib",
+            CrateFlavor::Rdylib => "rdylib",
         })
     }
 }
@@ -296,6 +298,7 @@ impl IntoDiagArg for CrateFlavor {
             CrateFlavor::Rlib => DiagArgValue::Str(Cow::Borrowed("rlib")),
             CrateFlavor::Rmeta => DiagArgValue::Str(Cow::Borrowed("rmeta")),
             CrateFlavor::Dylib => DiagArgValue::Str(Cow::Borrowed("dylib")),
+            CrateFlavor::Rdylib => DiagArgValue::Str(Cow::Borrowed("rdylib")),
         }
     }
 }
@@ -383,10 +386,14 @@ impl<'a> CrateLocator<'a> {
         let rmeta_suffix = ".rmeta";
         let rlib_suffix = ".rlib";
         let dylib_suffix = &self.target.dll_suffix;
+        // TODO: should be here `dylib_suffix` but different prefix?
+        let rdylib_suffix = ".rdylib";
         let staticlib_suffix = &self.target.staticlib_suffix;
 
-        let mut candidates: FxHashMap<_, (FxHashMap<_, _>, FxHashMap<_, _>, FxHashMap<_, _>)> =
-            Default::default();
+        let mut candidates: FxHashMap<
+            _,
+            (FxHashMap<_, _>, FxHashMap<_, _>, FxHashMap<_, _>, FxHashMap<_, _>),
+        > = Default::default();
 
         // First, find all possible candidate rlibs and dylibs purely based on
         // the name of the files themselves. We're trying to match against an
@@ -426,6 +433,10 @@ impl<'a> CrateLocator<'a> {
                     && let Some(f) = f.strip_suffix(dylib_suffix.as_ref())
                 {
                     (f, CrateFlavor::Dylib)
+                } else if let Some(f) = f.strip_prefix(dylib_prefix)
+                    && let Some(f) = f.strip_suffix(rdylib_suffix)
+                {
+                    (f, CrateFlavor::Rdylib)
                 } else {
                     if f.starts_with(staticlib_prefix) && f.ends_with(staticlib_suffix.as_ref()) {
                         self.crate_rejections.via_kind.push(CrateMismatch {
@@ -438,7 +449,8 @@ impl<'a> CrateLocator<'a> {
 
                 info!("lib candidate: {}", spf.path.display());
 
-                let (rlibs, rmetas, dylibs) = candidates.entry(hash.to_string()).or_default();
+                let (rlibs, rmetas, dylibs, rdylibs) =
+                    candidates.entry(hash.to_string()).or_default();
                 let path = try_canonicalize(&spf.path).unwrap_or_else(|_| spf.path.clone());
                 if seen_paths.contains(&path) {
                     continue;
@@ -448,6 +460,7 @@ impl<'a> CrateLocator<'a> {
                     CrateFlavor::Rlib => rlibs.insert(path, search_path.kind),
                     CrateFlavor::Rmeta => rmetas.insert(path, search_path.kind),
                     CrateFlavor::Dylib => dylibs.insert(path, search_path.kind),
+                    CrateFlavor::Rdylib => rdylibs.insert(path, search_path.kind),
                 };
             }
         }
@@ -461,8 +474,8 @@ impl<'a> CrateLocator<'a> {
         // libraries corresponds to the crate id and hash criteria that this
         // search is being performed for.
         let mut libraries = FxHashMap::default();
-        for (_hash, (rlibs, rmetas, dylibs)) in candidates {
-            if let Some((svh, lib)) = self.extract_lib(rlibs, rmetas, dylibs)? {
+        for (_hash, (rlibs, rmetas, dylibs, rdylibs)) in candidates {
+            if let Some((svh, lib)) = self.extract_lib(rlibs, rmetas, dylibs, rdylibs)? {
                 libraries.insert(svh, lib);
             }
         }
@@ -497,6 +510,7 @@ impl<'a> CrateLocator<'a> {
         rlibs: FxHashMap<PathBuf, PathKind>,
         rmetas: FxHashMap<PathBuf, PathKind>,
         dylibs: FxHashMap<PathBuf, PathKind>,
+        rdylibs: FxHashMap<PathBuf, PathKind>,
     ) -> Result<Option<(Svh, Library)>, CrateError> {
         let mut slot = None;
         // Order here matters, rmeta should come first. See comment in
@@ -505,6 +519,7 @@ impl<'a> CrateLocator<'a> {
             rmeta: self.extract_one(rmetas, CrateFlavor::Rmeta, &mut slot)?,
             rlib: self.extract_one(rlibs, CrateFlavor::Rlib, &mut slot)?,
             dylib: self.extract_one(dylibs, CrateFlavor::Dylib, &mut slot)?,
+            rdylib: self.extract_one(rdylibs, CrateFlavor::Rdylib, &mut slot)?,
         };
         Ok(slot.map(|(svh, metadata, _)| (svh, Library { source, metadata })))
     }
@@ -705,7 +720,9 @@ impl<'a> CrateLocator<'a> {
         let mut rlibs = FxHashMap::default();
         let mut rmetas = FxHashMap::default();
         let mut dylibs = FxHashMap::default();
+        let mut rdylibs = FxHashMap::default();
         for loc in &self.exact_paths {
+            println!("loc: {:?}", loc);
             if !loc.canonicalized().exists() {
                 return Err(CrateError::ExternLocationNotExist(
                     self.crate_name,
@@ -726,6 +743,7 @@ impl<'a> CrateLocator<'a> {
             };
 
             if file.starts_with("lib") && (file.ends_with(".rlib") || file.ends_with(".rmeta"))
+                || file.ends_with(".rdylib")
                 || file.starts_with(self.target.dll_prefix.as_ref())
                     && file.ends_with(self.target.dll_suffix.as_ref())
             {
@@ -742,6 +760,8 @@ impl<'a> CrateLocator<'a> {
                     rlibs.insert(loc_canon, PathKind::ExternFlag);
                 } else if loc.file_name().unwrap().to_str().unwrap().ends_with(".rmeta") {
                     rmetas.insert(loc_canon, PathKind::ExternFlag);
+                } else if loc.file_name().unwrap().to_str().unwrap().ends_with(".rdylib") {
+                    rdylibs.insert(loc_canon, PathKind::ExternFlag);
                 } else {
                     dylibs.insert(loc_canon, PathKind::ExternFlag);
                 }
@@ -752,8 +772,8 @@ impl<'a> CrateLocator<'a> {
             }
         }
 
-        // Extract the dylib/rlib/rmeta triple.
-        Ok(self.extract_lib(rlibs, rmetas, dylibs)?.map(|(_, lib)| lib))
+        // Extract the dylib/rlib/rmeta/rdylib.
+        Ok(self.extract_lib(rlibs, rmetas, dylibs, rdylibs)?.map(|(_, lib)| lib))
     }
 
     pub(crate) fn into_error(self, root: Option<CratePaths>) -> CrateError {
@@ -831,23 +851,48 @@ fn get_metadata_section<'p>(
                 slice_owned(inflated, Deref::deref)
             }
         }
-        CrateFlavor::Rmeta => {
-            // mmap the file, because only a small fraction of it is read.
-            let file = std::fs::File::open(filename).map_err(|_| {
-                MetadataError::LoadFailure(format!(
-                    "failed to open rmeta metadata: '{}'",
-                    filename.display()
-                ))
-            })?;
-            let mmap = unsafe { Mmap::map(file) };
-            let mmap = mmap.map_err(|_| {
-                MetadataError::LoadFailure(format!(
-                    "failed to mmap rmeta metadata: '{}'",
-                    filename.display()
-                ))
-            })?;
+        CrateFlavor::Rmeta => get_rmeta_metadata_section(filename)?,
+        CrateFlavor::Rdylib => {
+            // TODO: reuse `tcx.output_filenames(()).temp_path`
+            // TODO: see `exec_linker` for example
 
-            slice_owned(mmap, Deref::deref)
+            let compiler = std::env::current_exe().map_err(|_err| {
+                MetadataError::LoadFailure(
+                    "couldn't obtain current compiler binary when loading rdylib".to_string(),
+                )
+            })?;
+            // TODO: prefixes on different platforms are different? See `find_library_crate`
+            let file_name =
+                filename.file_stem().unwrap().to_str().unwrap().strip_prefix("lib").unwrap();
+            // TODO: load src from .so section
+            let interface_name = format!("{}_interface.rs", file_name);
+            let interface_path = filename.parent().unwrap();
+            let interface = PathBuf::from(interface_path).join(&interface_name);
+            println!("interface: {:?}", interface);
+
+            let res = std::process::Command::new(compiler)
+                .arg(&interface)
+                .arg("--crate-type=lib") // TODO: rlib? dylib?. remove codegen?
+                .arg("--emit=metadata")
+                .arg("-Zcrate-attr=feature(export)")
+                .output()
+                .map_err(|err| {
+                    MetadataError::LoadFailure(format!("couldn't compiler interface: {:?}", err))
+                })?;
+
+            if !res.status.success() {
+                return Err(MetadataError::LoadFailure(format!(
+                    "couldn't compiler interface: {:?}",
+                    std::str::from_utf8(&res.stderr)
+                )));
+            }
+
+            // TODO: remove str, check for success. canon? better interface format
+            let rmeta_name = format!("lib{}", interface_name);
+            let mut rmeta = PathBuf::from(interface_path).join(&rmeta_name);
+            rmeta.set_extension("rmeta");
+            println!("rmeta: {:?}", rmeta);
+            get_rmeta_metadata_section(&rmeta)?
         }
     };
     let Ok(blob) = MetadataBlob::new(raw_bytes) else {
@@ -869,6 +914,25 @@ fn get_metadata_section<'p>(
             });
         }
     }
+}
+
+fn get_rmeta_metadata_section<'a, 'p>(filename: &'p Path) -> Result<OwnedSlice, MetadataError<'a>> {
+    // mmap the file, because only a small fraction of it is read.
+    let file = std::fs::File::open(filename).map_err(|_| {
+        MetadataError::LoadFailure(format!(
+            "failed to open rmeta metadata: '{}'",
+            filename.display()
+        ))
+    })?;
+    let mmap = unsafe { Mmap::map(file) };
+    let mmap = mmap.map_err(|_| {
+        MetadataError::LoadFailure(format!(
+            "failed to mmap rmeta metadata: '{}'",
+            filename.display()
+        ))
+    })?;
+
+    Ok(slice_owned(mmap, Deref::deref))
 }
 
 /// A diagnostic function for dumping crate metadata to an output stream.

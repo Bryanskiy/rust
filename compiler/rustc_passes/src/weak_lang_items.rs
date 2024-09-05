@@ -64,7 +64,8 @@ fn verify(tcx: TyCtxt<'_>, items: &lang_items::LanguageItems) {
         | CrateType::ProcMacro
         | CrateType::Cdylib
         | CrateType::Executable
-        | CrateType::Staticlib => true,
+        | CrateType::Staticlib
+        | CrateType::Rdylib => true,
         CrateType::Rlib => false,
     });
     if !needs_check {

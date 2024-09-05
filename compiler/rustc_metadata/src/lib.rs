@@ -33,6 +33,7 @@ pub mod creader;
 pub mod errors;
 pub mod fs;
 pub mod locator;
+pub mod rdylib;
 
 pub use creader::{load_symbol_from_dylib, DylibError};
 pub use fs::{emit_wrapper_file, METADATA_FILENAME};

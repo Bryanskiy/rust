@@ -512,6 +512,10 @@ pub const BUILTIN_ATTRIBUTES: &[BuiltinAttribute] = &[
         naked, Normal, template!(Word), WarnFollowing, EncodeCrossCrate::No,
         naked_functions, experimental!(naked)
     ),
+    gated!(
+        export, Normal, template!(Word), WarnFollowing,
+        EncodeCrossCrate::Yes, experimental!(export)
+    ),
 
     // Testing:
     gated!(

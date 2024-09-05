@@ -1014,6 +1014,13 @@ impl OutputFilenames {
             .unwrap_or_else(|| OutFileName::Real(self.output_path(flavor)))
     }
 
+    pub fn interface_path(&self) -> OutFileName {
+        let mut path = self.out_directory.join(&self.filestem);
+        path.as_mut_os_string().push("_interface");
+        path.set_extension("rs");
+        OutFileName::Real(path)
+    }
+
     /// Gets the output path where a compilation artifact of the given type
     /// should be placed on disk.
     fn output_path(&self, flavor: OutputType) -> PathBuf {
@@ -1273,12 +1280,13 @@ pub enum CrateType {
     Staticlib,
     Cdylib,
     ProcMacro,
+    Rdylib,
 }
 
 impl CrateType {
     pub fn has_metadata(self) -> bool {
         match self {
-            CrateType::Rlib | CrateType::Dylib | CrateType::ProcMacro => true,
+            CrateType::Rlib | CrateType::Dylib | CrateType::Rdylib | CrateType::ProcMacro => true,
             CrateType::Executable | CrateType::Cdylib | CrateType::Staticlib => false,
         }
     }
@@ -2791,6 +2799,7 @@ pub fn parse_crate_types_from_list(list_list: Vec<String>) -> Result<Vec<CrateTy
                 "cdylib" => CrateType::Cdylib,
                 "bin" => CrateType::Executable,
                 "proc-macro" => CrateType::ProcMacro,
+                "rdylib" => CrateType::Rdylib,
                 _ => return Err(format!("unknown crate type: `{part}`")),
             };
             if !crate_types.contains(&new_part) {
@@ -2882,6 +2891,7 @@ impl fmt::Display for CrateType {
             CrateType::Staticlib => "staticlib".fmt(f),
             CrateType::Cdylib => "cdylib".fmt(f),
             CrateType::ProcMacro => "proc-macro".fmt(f),
+            CrateType::Rdylib => "rdylib".fmt(f),
         }
     }
 }

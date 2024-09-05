@@ -146,6 +146,9 @@ fn symbol_name_provider<'tcx>(tcx: TyCtxt<'tcx>, instance: Instance<'tcx>) -> ty
         }
     });
 
+    println!("symbol_name: {}", symbol_name);
+    println!("instance: {:?}", instance);
+
     ty::SymbolName::new(tcx, &symbol_name)
 }
 
@@ -263,6 +266,8 @@ fn compute_symbol_name<'tcx>(
             v0::mangle(tcx, instance, instantiating_crate)
         }),
     };
+    println!("compute_symbol_name: {:?}", instance);
+    println!("compute_symbol_name: {:?}", symbol);
 
     debug_assert!(
         rustc_demangle::try_demangle(&symbol).is_ok(),

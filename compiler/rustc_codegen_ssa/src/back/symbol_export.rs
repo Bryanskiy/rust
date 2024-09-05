@@ -27,7 +27,7 @@ fn crate_export_threshold(crate_type: CrateType) -> SymbolExportLevel {
         CrateType::Executable | CrateType::Staticlib | CrateType::ProcMacro | CrateType::Cdylib => {
             SymbolExportLevel::C
         }
-        CrateType::Rlib | CrateType::Dylib => SymbolExportLevel::Rust,
+        CrateType::Rlib | CrateType::Dylib | CrateType::Rdylib => SymbolExportLevel::Rust,
     }
 }
 
@@ -56,6 +56,8 @@ fn reachable_non_generics_provider(tcx: TyCtxt<'_>, _: LocalCrate) -> DefIdMap<S
     // level instead.
     let special_runtime_crate =
         tcx.is_panic_runtime(LOCAL_CRATE) || tcx.is_compiler_builtins(LOCAL_CRATE);
+
+    println!("reachable_set: {:?}", tcx.reachable_set(()));
 
     let mut reachable_non_generics: DefIdMap<_> = tcx
         .reachable_set(())
@@ -180,6 +182,8 @@ fn exported_symbols_provider_local(
     let sorted = tcx.with_stable_hashing_context(|hcx| {
         tcx.reachable_non_generics(LOCAL_CRATE).to_sorted(&hcx, true)
     });
+
+    println!("sorted: {:?}", sorted);
 
     let mut symbols: Vec<_> =
         sorted.iter().map(|(&def_id, &info)| (ExportedSymbol::NonGeneric(def_id), info)).collect();

@@ -3987,6 +3987,7 @@ dependencies = [
  "libloading",
  "odht",
  "rustc_ast",
+ "rustc_ast_pretty",
  "rustc_attr",
  "rustc_data_structures",
  "rustc_errors",
@@ -4006,6 +4007,7 @@ dependencies = [
  "rustc_type_ir",
  "snap",
  "tempfile",
+ "thin-vec",
  "tracing",
 ]
 
