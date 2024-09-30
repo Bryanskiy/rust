@@ -230,6 +230,7 @@ fn configure_and_expand(
             sess,
             features,
             &krate,
+            tcx.is_interface_build(),
             resolver.lint_buffer(),
         )
     });
@@ -842,6 +843,8 @@ fn run_required_analyses(tcx: TyCtxt<'_>) {
                 CStore::from_tcx(tcx).report_unused_deps(tcx);
             },
             {
+                tcx.ensure().exportable_items(LOCAL_CRATE);
+                tcx.ensure().stable_order_of_exportable_impls(LOCAL_CRATE);
                 tcx.hir().par_for_each_module(|module| {
                     tcx.ensure().check_mod_loops(module);
                     tcx.ensure().check_mod_attrs(module);

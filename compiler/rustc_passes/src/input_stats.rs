@@ -526,6 +526,7 @@ impl<'v> ast_visit::Visitor<'v> for StatCollector<'v> {
     fn visit_item(&mut self, i: &'v ast::Item) {
         record_variants!((self, i, i.kind, None, ast, Item, ItemKind), [
             ExternCrate,
+            ExternDynCrate,
             Use,
             Static,
             Const,

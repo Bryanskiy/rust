@@ -627,6 +627,25 @@ passes_pass_by_value =
 
 passes_proc_macro_bad_sig = {$kind} has incorrect signature
 
+passes_unexportable_adt_with_private_fields = ADT types with private fields are not exportable
+    .note = `{$field_name}` is private
+
+passes_unexportable_fn_abi = only functions with "C" ABI are exportable
+
+passes_unexportable_generic_fn = generic functions are not exportable
+
+passes_unexportable_item = {$descr}'s are not exportable
+
+passes_unexportable_priv_item = private items are not exportable
+    .note = is only usable at visibility `{$vis_descr}`
+
+passes_unexportable_mangling_scheme = `#[export]` attribute is only usable with `v0` mangling scheme
+
+passes_unexportable_type_in_interface = {$desc} with `#[export]` attribute uses type `{$ty}`, which is not exportable
+    .label = not exportable
+
+passes_unexportable_type_repr = types with unstable layout are not exportable
+
 passes_remove_fields =
     consider removing { $num ->
       [one] this
@@ -635,6 +654,8 @@ passes_remove_fields =
       [one] field
      *[other] fields
     }
+
+passes_report_stable_impl_id = stable impl id: {$id}
 
 passes_repr_align_function =
     `repr(align)` attributes on functions are unstable

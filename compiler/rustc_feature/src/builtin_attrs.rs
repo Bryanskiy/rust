@@ -512,6 +512,11 @@ pub const BUILTIN_ATTRIBUTES: &[BuiltinAttribute] = &[
         naked_functions, experimental!(naked)
     ),
 
+    gated!(
+        export, Normal, template!(Word), WarnFollowing,
+        EncodeCrossCrate::Yes, experimental!(export)
+    ),
+
     // Testing:
     gated!(
         test_runner, CrateLevel, template!(List: "path"), ErrorFollowing,
@@ -1157,6 +1162,10 @@ pub const BUILTIN_ATTRIBUTES: &[BuiltinAttribute] = &[
     rustc_attr!(
         TEST, pattern_complexity, CrateLevel, template!(NameValueStr: "N"),
         ErrorFollowing, EncodeCrossCrate::No,
+    ),
+    rustc_attr!(
+        TEST, rustc_stable_impl_id, Normal, template!(Word),
+        WarnFollowing, EncodeCrossCrate::No
     ),
 ];
 
