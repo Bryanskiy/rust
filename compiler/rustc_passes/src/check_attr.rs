@@ -251,6 +251,7 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
                 [
                     // ok
                     sym::allow
+                    | sym::export
                     | sym::expect
                     | sym::warn
                     | sym::deny
