@@ -1095,7 +1095,7 @@ pub fn walk_item_kind(
 impl WalkItemKind for ItemKind {
     fn walk(&mut self, span: Span, id: NodeId, vis: &mut impl MutVisitor) {
         match self {
-            ItemKind::ExternCrate(_orig_name) => {}
+            ItemKind::ExternCrate(_kind, _orig_name) => {}
             ItemKind::Use(use_tree) => vis.visit_use_tree(use_tree),
             ItemKind::Static(box StaticItem { ty, safety: _, mutability: _, expr }) => {
                 vis.visit_ty(ty);
@@ -1722,7 +1722,7 @@ impl DummyAstNode for Item {
                 tokens: Default::default(),
             },
             ident: Ident::empty(),
-            kind: ItemKind::ExternCrate(None),
+            kind: ItemKind::ExternCrate(ExternCrateKind::Normal, None),
             tokens: Default::default(),
         }
     }

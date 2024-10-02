@@ -1042,7 +1042,8 @@ impl<'a, 'tcx> CrateLoader<'a, 'tcx> {
         definitions: &Definitions,
     ) -> Option<CrateNum> {
         match item.kind {
-            ast::ItemKind::ExternCrate(orig_name) => {
+            // TODO
+            ast::ItemKind::ExternCrate(_kind, orig_name) => {
                 debug!(
                     "resolving extern crate stmt. ident: {} orig_name: {:?}",
                     item.ident, orig_name

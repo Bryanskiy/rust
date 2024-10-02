@@ -58,14 +58,14 @@ pub fn inject(
                 span,
                 Ident::new(kw::Underscore, ident_span),
                 thin_vec![],
-                ast::ItemKind::ExternCrate(Some(name)),
+                ast::ItemKind::ExternCrate(ast::ExternCrateKind::Normal, Some(name)),
             )
         } else {
             cx.item(
                 span,
                 Ident::new(name, ident_span),
                 thin_vec![cx.attr_word(sym::macro_use, span)],
-                ast::ItemKind::ExternCrate(None),
+                ast::ItemKind::ExternCrate(ast::ExternCrateKind::Normal, None),
             )
         };
         krate.items.insert(0, item);

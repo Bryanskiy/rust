@@ -781,7 +781,7 @@ impl<'a, 'ra, 'tcx> BuildReducedGraphVisitor<'a, 'ra, 'tcx> {
                 );
             }
 
-            ItemKind::ExternCrate(orig_name) => {
+            ItemKind::ExternCrate(_, orig_name) => {
                 self.build_reduced_graph_for_extern_crate(
                     orig_name,
                     item,
@@ -1058,7 +1058,7 @@ impl<'a, 'ra, 'tcx> BuildReducedGraphVisitor<'a, 'ra, 'tcx> {
                         span: item.span,
                     });
                 }
-                if let ItemKind::ExternCrate(Some(orig_name)) = item.kind {
+                if let ItemKind::ExternCrate(_, Some(orig_name)) = item.kind {
                     if orig_name == kw::SelfLower {
                         self.r.dcx().emit_err(errors::MacroUseExternCrateSelf { span: attr.span });
                     }
