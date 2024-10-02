@@ -46,7 +46,7 @@ use rustc_errors::{
 };
 use rustc_feature::find_gated_cfg;
 use rustc_interface::util::{self, get_codegen_backend};
-use rustc_interface::{Linker, Queries, interface, passes};
+use rustc_interface::{Linker, Queries, export, interface, passes};
 use rustc_lint::unerased_lint_store;
 use rustc_metadata::creader::MetadataLoader;
 use rustc_metadata::locator;
@@ -442,6 +442,10 @@ fn run_compiler(
             {
                 return early_exit();
             }
+
+            queries.global_ctxt()?.enter(|tcx| {
+                export::write_interface(tcx);
+            });
 
             if sess.opts.unstable_opts.no_analysis {
                 return early_exit();

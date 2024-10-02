@@ -9,6 +9,7 @@
 
 mod callbacks;
 mod errors;
+pub mod export;
 pub mod interface;
 pub mod passes;
 mod proc_macro_decls;

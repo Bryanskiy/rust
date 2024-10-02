@@ -155,8 +155,8 @@ impl<'a> State<'a> {
         match &item.kind {
             ast::ItemKind::ExternCrate(kind, orig_name) => {
                 let head = match kind {
-                    ast::ExternCrateKind::Normal =>  "extern crate",
-                    ast::ExternCrateKind::Stable =>  "extern dyn crate",
+                    ast::ExternCrateKind::Normal => "extern crate",
+                    ast::ExternCrateKind::Stable => "extern dyn crate",
                 };
                 self.head(visibility_qualified(&item.vis, head));
                 if let &Some(orig_name) = orig_name {

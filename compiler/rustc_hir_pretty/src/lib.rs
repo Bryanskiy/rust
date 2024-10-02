@@ -74,6 +74,14 @@ pub struct State<'a> {
 }
 
 impl<'a> State<'a> {
+    pub fn new(
+        comments: Option<Comments<'a>>,
+        attrs: &'a dyn Fn(HirId) -> &'a [ast::Attribute],
+        ann: &'a (dyn PpAnn + 'a),
+    ) -> State<'a> {
+        State { s: pp::Printer::new(), comments, ann, attrs }
+    }
+
     fn attrs(&self, id: HirId) -> &'a [ast::Attribute] {
         (self.attrs)(id)
     }
@@ -173,16 +181,21 @@ pub fn print_crate<'a>(
     attrs: &'a dyn Fn(HirId) -> &'a [ast::Attribute],
     ann: &'a dyn PpAnn,
 ) -> String {
-    let mut s = State {
+    let s = State {
         s: pp::Printer::new(),
         comments: Some(Comments::new(sm, filename, input)),
         attrs,
         ann,
     };
 
-    // When printing the AST, we sometimes need to inject `#[no_std]` here.
-    // Since you can't compile the HIR, it's not necessary.
+    print_crate_with_state(s, krate, attrs)
+}
 
+pub fn print_crate_with_state<'a>(
+    mut s: State<'a>,
+    krate: &hir::Mod<'_>,
+    attrs: &'a dyn Fn(HirId) -> &'a [ast::Attribute],
+) -> String {
     s.print_mod(krate, (*attrs)(hir::CRATE_HIR_ID));
     s.print_remaining_comments();
     s.s.eof()

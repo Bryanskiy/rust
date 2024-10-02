@@ -244,35 +244,7 @@ pub fn print_crate<'a>(
         State { s: pp::Printer::new(), comments: Some(Comments::new(sm, filename, input)), ann };
 
     if is_expanded && !krate.attrs.iter().any(|attr| attr.has_name(sym::no_core)) {
-        // We need to print `#![no_std]` (and its feature gate) so that
-        // compiling pretty-printed source won't inject libstd again.
-        // However, we don't want these attributes in the AST because
-        // of the feature gate, so we fake them up here.
-
-        // `#![feature(prelude_import)]`
-        let fake_attr = attr::mk_attr_nested_word(
-            g,
-            ast::AttrStyle::Inner,
-            Safety::Default,
-            sym::feature,
-            sym::prelude_import,
-            DUMMY_SP,
-        );
-        s.print_attribute(&fake_attr);
-
-        // Currently, in Rust 2018 we don't have `extern crate std;` at the crate
-        // root, so this is not needed, and actually breaks things.
-        if edition.is_rust_2015() {
-            // `#![no_std]`
-            let fake_attr = attr::mk_attr_word(
-                g,
-                ast::AttrStyle::Inner,
-                Safety::Default,
-                sym::no_std,
-                DUMMY_SP,
-            );
-            s.print_attribute(&fake_attr);
-        }
+        s.print_fake_attr(edition, g);
     }
 
     s.print_inner_attributes(&krate.attrs);
@@ -574,6 +546,37 @@ pub trait PrintState<'a>: std::ops::Deref<Target = pp::Printer> + std::ops::Dere
         self.word(st)
     }
 
+    /// We need to print `#![no_std]` (and its feature gate) so that
+    /// compiling pretty-printed source won't inject libstd again.
+    /// However, we don't want these attributes in the AST because
+    /// of the feature gate, so we fake them up here.
+    fn print_fake_attr(&mut self, edition: Edition, g: &AttrIdGenerator) {
+        // `#![feature(prelude_import)]`
+        let fake_attr = attr::mk_attr_nested_word(
+            g,
+            ast::AttrStyle::Inner,
+            Safety::Default,
+            sym::feature,
+            sym::prelude_import,
+            DUMMY_SP,
+        );
+        self.print_attribute(&fake_attr);
+
+        // Currently, in Rust 2018 we don't have `extern crate std;` at the crate
+        // root, so this is not needed, and actually breaks things.
+        if edition.is_rust_2015() {
+            // `#![no_std]`
+            let fake_attr = attr::mk_attr_word(
+                g,
+                ast::AttrStyle::Inner,
+                Safety::Default,
+                sym::no_std,
+                DUMMY_SP,
+            );
+            self.print_attribute(&fake_attr);
+        }
+    }
+
     fn print_inner_attributes(&mut self, attrs: &[ast::Attribute]) -> bool {
         self.print_either_attributes(attrs, ast::AttrStyle::Inner, false, true)
     }
@@ -603,6 +606,10 @@ pub trait PrintState<'a>: std::ops::Deref<Target = pp::Printer> + std::ops::Dere
             self.hardbreak_if_not_bol();
         }
         printed
+    }
+
+    fn print_attribute(&mut self, attr: &ast::Attribute) {
+        self.print_attribute_inline(attr, false)
     }
 
     fn print_attribute_inline(&mut self, attr: &ast::Attribute, is_inline: bool) {
@@ -2000,10 +2007,6 @@ impl<'a> State<'a> {
 
     fn print_outer_attributes_inline(&mut self, attrs: &[ast::Attribute]) -> bool {
         self.print_either_attributes(attrs, ast::AttrStyle::Outer, true, true)
-    }
-
-    fn print_attribute(&mut self, attr: &ast::Attribute) {
-        self.print_attribute_inline(attr, false)
     }
 
     fn print_meta_list_item(&mut self, item: &ast::NestedMetaItem) {
