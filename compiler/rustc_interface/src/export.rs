@@ -12,6 +12,11 @@ struct InterfaceAnn<'tcx> {
 }
 
 impl<'tcx> PpAnn for InterfaceAnn<'tcx> {
+    // FIXME: modify `State` instead?
+    fn pre(&self, state: &mut State<'_>, _node: AnnNode<'_>) {
+        state.word_nbsp("pub");
+    }
+
     // Do not print fn bodies.
     fn nested(&self, state: &mut State<'_>, nested: Nested) {
         // TODO: check body kind, what about consts?

@@ -1,4 +1,6 @@
+extern dyn crate libr;
+
 fn main() {
-    let x = lib::my_foo();
+    let x = libr::my_foo();
     assert_eq!(x, 0);
 }

@@ -1,6 +1,6 @@
 all:
-	rustc +stage1 libr.rs -C symbol-mangling-version=v0
-	rustc +stage1 app.rs --extern lib=liblibr.so -C symbol-mangling-version=v0
+	rustc +stage1 libr.rs -C symbol-mangling-version=v0 --emit=i-rs
+	rustc +stage1 app.rs -C symbol-mangling-version=v0 -L.
 
 clean:
 	rm -f *.rdylib

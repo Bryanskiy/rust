@@ -218,9 +218,10 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::{cmp, fmt};
 
+use rustc_ast::ExternCrateKind;
 use rustc_data_structures::fx::{FxHashSet, FxIndexMap};
 use rustc_data_structures::memmap::Mmap;
-use rustc_data_structures::owned_slice::slice_owned;
+use rustc_data_structures::owned_slice::{OwnedSlice, slice_owned};
 use rustc_data_structures::svh::Svh;
 use rustc_errors::{DiagArgValue, IntoDiagArg};
 use rustc_fs_util::try_canonicalize;
@@ -256,6 +257,7 @@ pub(crate) struct CrateLocator<'a> {
     pub triple: TargetTriple,
     pub filesearch: FileSearch<'a>,
     pub is_proc_macro: bool,
+    crate_kind: ExternCrateKind,
 
     // Mutable in-progress state or output.
     crate_rejections: CrateRejections,
@@ -309,6 +311,7 @@ impl<'a> CrateLocator<'a> {
         hash: Option<Svh>,
         extra_filename: Option<&'a str>,
         path_kind: PathKind,
+        crate_kind: ExternCrateKind,
     ) -> CrateLocator<'a> {
         let needs_object_code = sess.opts.output_types.should_codegen();
         // If we're producing an rlib, then we don't need object code.
@@ -322,6 +325,7 @@ impl<'a> CrateLocator<'a> {
             metadata_loader,
             cfg_version: sess.cfg_version,
             crate_name,
+            crate_kind,
             exact_paths: if hash.is_none() {
                 sess.opts
                     .externs
@@ -572,6 +576,8 @@ impl<'a> CrateLocator<'a> {
                 &lib,
                 self.metadata_loader,
                 self.cfg_version,
+                self.crate_kind,
+                Some(self.crate_name),
             ) {
                 Ok(blob) => {
                     if let Some(h) = self.crate_matches(&blob, &lib) {
@@ -774,6 +780,8 @@ fn get_metadata_section<'p>(
     filename: &'p Path,
     loader: &dyn MetadataLoader,
     cfg_version: &'static str,
+    crate_kind: ExternCrateKind,
+    crate_name: Option<Symbol>,
 ) -> Result<MetadataBlob, MetadataError<'p>> {
     if !filename.exists() {
         return Err(MetadataError::NotPresent(filename));
@@ -781,6 +789,45 @@ fn get_metadata_section<'p>(
     let raw_bytes = match flavor {
         CrateFlavor::Rlib => {
             loader.get_rlib_metadata(target, filename).map_err(MetadataError::LoadFailure)?
+        }
+        // FIXME: could it also be used for rlibs?
+        CrateFlavor::Dylib if crate_kind == ExternCrateKind::Stable => {
+            let compiler = std::env::current_exe().map_err(|_err| {
+                MetadataError::LoadFailure(
+                    "couldn't obtain current compiler binary when loading `extern dyn crate`"
+                        .to_string(),
+                )
+            })?;
+
+            let mut interface = PathBuf::from(filename);
+            interface.set_extension("rs");
+
+            // TODO: propagate `tcx.output_filenames(())`
+            let res = std::process::Command::new(compiler)
+                .arg(&interface)
+                .arg("--crate-type=lib") // TODO: rlib? dylib?
+                .arg("--emit=metadata")
+                .arg(format!("--crate-name={}", crate_name.unwrap()))
+                .output()
+                .map_err(|err| {
+                    MetadataError::LoadFailure(format!("couldn't compiler interface: {:?}", err))
+                })?;
+
+            if !res.status.success() {
+                return Err(MetadataError::LoadFailure(format!(
+                    "couldn't compiler interface: {:?}",
+                    std::str::from_utf8(&res.stderr)
+                )));
+            }
+
+            // TODO: avoid `unwrap`
+            let interface_path = interface.parent().unwrap();
+            let interface_name = interface.file_stem().unwrap();
+            let rmeta_name = format!("{}", interface_name.to_str().unwrap());
+            let mut rmeta = PathBuf::from(interface_path).join(&rmeta_name);
+            rmeta.set_extension("rmeta");
+            println!("rmeta: {:?}", rmeta);
+            get_rmeta_metadata_section(&rmeta)?
         }
         CrateFlavor::Dylib => {
             let buf =
@@ -831,24 +878,7 @@ fn get_metadata_section<'p>(
                 slice_owned(inflated, Deref::deref)
             }
         }
-        CrateFlavor::Rmeta => {
-            // mmap the file, because only a small fraction of it is read.
-            let file = std::fs::File::open(filename).map_err(|_| {
-                MetadataError::LoadFailure(format!(
-                    "failed to open rmeta metadata: '{}'",
-                    filename.display()
-                ))
-            })?;
-            let mmap = unsafe { Mmap::map(file) };
-            let mmap = mmap.map_err(|_| {
-                MetadataError::LoadFailure(format!(
-                    "failed to mmap rmeta metadata: '{}'",
-                    filename.display()
-                ))
-            })?;
-
-            slice_owned(mmap, Deref::deref)
-        }
+        CrateFlavor::Rmeta => get_rmeta_metadata_section(filename)?,
     };
     let Ok(blob) = MetadataBlob::new(raw_bytes) else {
         return Err(MetadataError::LoadFailure(format!(
@@ -871,6 +901,25 @@ fn get_metadata_section<'p>(
     }
 }
 
+fn get_rmeta_metadata_section<'a, 'p>(filename: &'p Path) -> Result<OwnedSlice, MetadataError<'a>> {
+    // mmap the file, because only a small fraction of it is read.
+    let file = std::fs::File::open(filename).map_err(|_| {
+        MetadataError::LoadFailure(format!(
+            "failed to open rmeta metadata: '{}'",
+            filename.display()
+        ))
+    })?;
+    let mmap = unsafe { Mmap::map(file) };
+    let mmap = mmap.map_err(|_| {
+        MetadataError::LoadFailure(format!(
+            "failed to mmap rmeta metadata: '{}'",
+            filename.display()
+        ))
+    })?;
+
+    Ok(slice_owned(mmap, Deref::deref))
+}
+
 /// A diagnostic function for dumping crate metadata to an output stream.
 pub fn list_file_metadata(
     target: &Target,
@@ -881,7 +930,15 @@ pub fn list_file_metadata(
     cfg_version: &'static str,
 ) -> IoResult<()> {
     let flavor = get_flavor_from_path(path);
-    match get_metadata_section(target, flavor, path, metadata_loader, cfg_version) {
+    match get_metadata_section(
+        target,
+        flavor,
+        path,
+        metadata_loader,
+        cfg_version,
+        ExternCrateKind::Normal,
+        None,
+    ) {
         Ok(metadata) => metadata.list_crate_metadata(out, ls_kinds),
         Err(msg) => write!(out, "{msg}\n"),
     }

@@ -1,9 +1,9 @@
 #![feature(export)]
-#![crate_type = "rdylib"]
+#![crate_type = "dylib"]
+
+struct Foo;
 
 #[export]
 pub extern "C" fn my_foo() -> i16 {
     0i16
 }
-
-struct Foo;

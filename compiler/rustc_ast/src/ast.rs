@@ -3273,7 +3273,7 @@ pub struct ConstItem {
     pub expr: Option<P<Expr>>,
 }
 
-#[derive(Clone, Copy, Encodable, Decodable, Debug)]
+#[derive(PartialEq, Eq, Clone, Copy, Encodable, Decodable, Debug)]
 pub enum ExternCrateKind {
     Stable,
     Normal,
