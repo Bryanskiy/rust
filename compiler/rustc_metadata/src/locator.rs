@@ -826,7 +826,6 @@ fn get_metadata_section<'p>(
             let rmeta_name = format!("{}", interface_name.to_str().unwrap());
             let mut rmeta = PathBuf::from(interface_path).join(&rmeta_name);
             rmeta.set_extension("rmeta");
-            println!("rmeta: {:?}", rmeta);
             get_rmeta_metadata_section(&rmeta)?
         }
         CrateFlavor::Dylib => {

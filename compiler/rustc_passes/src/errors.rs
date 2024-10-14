@@ -1801,3 +1801,12 @@ pub(crate) struct AttrCrateLevelOnlySugg {
     #[primary_span]
     pub attr: Span,
 }
+
+// FIXME: more expressive diagnostic
+#[derive(Diagnostic)]
+#[diag(passes_unexportable_item)]
+pub(crate) struct UnexportableItem<'a> {
+    #[primary_span]
+    pub span: Span,
+    pub descr: &'a str,
+}

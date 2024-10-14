@@ -1,0 +1,20 @@
+error: non "C" ABI function is unexportable
+  --> $DIR/exportable.rs:9:5
+   |
+LL |     pub fn foo() {}
+   |     ^^^^^^^^^^^^
+
+error: type without stable representation is unexportable
+  --> $DIR/exportable.rs:21:5
+   |
+LL |     struct S2;
+   |     ^^^^^^^^^
+
+error: item with pub(crate) visibility is unexportable
+  --> $DIR/exportable.rs:6:5
+   |
+LL |     pub struct S;
+   |     ^^^^^^^^^^^^
+
+error: aborting due to 3 previous errors
+
