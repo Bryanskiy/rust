@@ -20,6 +20,7 @@ use rustc_middle::query::Providers;
 pub mod abi_test;
 mod check_attr;
 mod check_const;
+mod check_export;
 pub mod dead;
 mod debugger_visualizer;
 mod diagnostic_items;

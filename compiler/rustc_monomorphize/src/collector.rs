@@ -950,6 +950,10 @@ fn should_codegen_locally<'tcx>(tcx: TyCtxtAt<'tcx>, instance: Instance<'tcx>) -
         return true;
     }
 
+    if tcx.has_attr(def_id, sym::export) {
+        return false;
+    }
+
     if tcx.is_reachable_non_generic(def_id)
         || instance.polymorphize(*tcx).upstream_monomorphization(*tcx).is_some()
     {

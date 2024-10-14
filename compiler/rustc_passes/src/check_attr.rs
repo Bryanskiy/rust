@@ -40,7 +40,7 @@ use rustc_trait_selection::infer::{TyCtxtInferExt, ValuePairs};
 use rustc_trait_selection::traits::ObligationCtxt;
 use tracing::debug;
 
-use crate::{errors, fluent_generated as fluent};
+use crate::{check_export, errors, fluent_generated as fluent};
 
 #[derive(LintDiagnostic)]
 #[diag(passes_diagnostic_diagnostic_on_unimplemented_only_for_traits)]
@@ -248,10 +248,10 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
                 }
                 [sym::linkage, ..] => self.check_linkage(attr, span, target),
                 [sym::rustc_pub_transparent, ..] => self.check_rustc_pub_transparent( attr.span, span, attrs),
+                [sym::export] => check_export::check_export(self.tcx, hir_id),
                 [
                     // ok
                     sym::allow
-                    | sym::export
                     | sym::expect
                     | sym::warn
                     | sym::deny

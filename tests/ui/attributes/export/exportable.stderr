@@ -1,0 +1,74 @@
+error: non "C" ABI function is unexportable
+  --> $DIR/exportable.rs:12:5
+   |
+LL |     pub fn foo() {}
+   |     ^^^^^^^^^^^^
+
+error: type without stable representation is unexportable
+  --> $DIR/exportable.rs:24:5
+   |
+LL |     struct S2;
+   |     ^^^^^^^^^
+
+error: item with pub(crate) visibility is unexportable
+  --> $DIR/exportable.rs:8:5
+   |
+LL |     pub struct S;
+   |     ^^^^^^^^^^^^
+
+error: type without stable representation is unexportable
+  --> $DIR/exportable.rs:8:5
+   |
+LL |     pub struct S;
+   |     ^^^^^^^^^^^^
+
+error: non "C" ABI function is unexportable
+  --> $DIR/exportable.rs:30:5
+   |
+LL |     pub fn foo1() {}
+   |     ^^^^^^^^^^^^^
+
+error: fn with not exportable nested type is unexportable
+  --> $DIR/exportable.rs:41:5
+   |
+LL |     pub extern "C" fn foo3(x: Box<S>) {}
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: fn with not exportable nested type is unexportable
+  --> $DIR/exportable.rs:53:9
+   |
+LL |         pub extern "C" fn foo2(self) {}
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: generic item is unexportable
+  --> $DIR/exportable.rs:61:9
+   |
+LL |         pub extern "C" fn foo1(&self) {}
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: (u32,) is unexportable
+  --> $DIR/exportable.rs:77:5
+   |
+LL |     pub extern "C" fn foo1(x: <S as Trait>::Type) {}
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: [i32; 4] is unexportable
+  --> $DIR/exportable.rs:81:5
+   |
+LL |     pub type Type = [i32; 4];
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: extern "C" fn() is unexportable
+  --> $DIR/exportable.rs:86:9
+   |
+LL |         pub type Type = extern "C" fn();
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: () is unexportable
+  --> $DIR/exportable.rs:86:9
+   |
+LL |         pub type Type = extern "C" fn();
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: aborting due to 12 previous errors
+
