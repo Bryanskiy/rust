@@ -595,7 +595,8 @@ passes_pass_by_value =
 
 passes_proc_macro_bad_sig = {$kind} has incorrect signature
 
-passes_unexportable_item = {$descr} is unexportable
+passes_unexportable_item = `export` {$desc} uses type `{$ty}`, which is not exportable
+    .label = not exportable
 
 passes_remove_fields =
     consider removing { $num ->

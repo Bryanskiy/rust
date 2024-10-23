@@ -1,3 +1,6 @@
+use std::fmt::write;
+use std::iter;
+
 use rustc_hir::def::{DefKind, Res};
 use rustc_hir::def_id::{DefId, LocalDefId};
 use rustc_hir::intravisit::{self, Visitor};
@@ -10,14 +13,28 @@ use rustc_middle::ty::{
 use rustc_span::{Span, sym};
 use rustc_target::spec::abi::Abi;
 
-// use rustc_trait_selection::infer::TyCtxtInferExt;
-// use rustc_trait_selection::traits::{self, ObligationCtxt};
 use crate::errors;
 
+#[derive(Clone, Copy, Debug)]
+enum InterfaceKind {
+    Fn,
+    TyAlias,
+}
+
+impl std::fmt::Display for InterfaceKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InterfaceKind::Fn => write!(f, "fn"),
+            InterfaceKind::TyAlias => write!(f, "alias"),
+        }
+    }
+}
+
 struct TypeIsExportableChecker<'tcx> {
-    is_ret: bool,
     tcx: TyCtxt<'tcx>,
-    span: Span,
+    interface_span: Span,
+    ty_span: Span,
+    kind: InterfaceKind,
 }
 
 impl<'tcx> TypeVisitor<TyCtxt<'tcx>> for TypeIsExportableChecker<'tcx> {
@@ -33,16 +50,13 @@ impl<'tcx> TypeVisitor<TyCtxt<'tcx>> for TypeIsExportableChecker<'tcx> {
                     return;
                 }
             }
+
             // Primitive types are exportable
             ty::Int(_) | ty::Uint(_) | ty::Float(_) | ty::Bool | ty::Char => {}
 
-            // TODO: references are ABI safe?
             ty::Ref(..) => {
                 return;
             }
-
-            // FIXME: rewrite like in `types.rs` for FFI safaty
-            ty::Tuple(tys) if self.is_ret && tys.is_empty() => {}
 
             ty::Array(..)
             | ty::Closure(..)
@@ -61,8 +75,10 @@ impl<'tcx> TypeVisitor<TyCtxt<'tcx>> for TypeIsExportableChecker<'tcx> {
             | ty::CoroutineWitness(..)
             | ty::Never => {
                 self.tcx.dcx().emit_err(errors::UnexportableItem {
-                    descr: &format!("{}", ty),
-                    span: self.span,
+                    desc: &format!("{}", self.kind),
+                    span: self.interface_span,
+                    ty: &format!("{}", ty),
+                    ty_span: self.ty_span,
                 });
             }
 
@@ -74,7 +90,9 @@ impl<'tcx> TypeVisitor<TyCtxt<'tcx>> for TypeIsExportableChecker<'tcx> {
     }
 }
 
-// TODO: exportable set for mangling. See `OpaqueTypeCollector` for example.
+// TODO: exportable set for mangling -> it should be a query.
+// TODO: See `OpaqueTypeCollector` for example.
+// TODO: only local items are exportable
 struct CheckExportVisitor<'tcx> {
     tcx: TyCtxt<'tcx>,
 }
@@ -82,29 +100,37 @@ struct CheckExportVisitor<'tcx> {
 // Which types are exportable but not FFI-safe?
 // TODO: returns after errors emit.
 impl<'tcx> CheckExportVisitor<'tcx> {
-    /// Only non-generic functions with a stable ABI (e.g. extern "C") are exportable.
-    /// TODO: nested types have `#[export]`
-    fn check_fn(&self, def_id: DefId) {
-        let span = self.tcx.def_span(def_id);
-        self.check_generics(def_id);
+    fn check(&self, ty: Ty<'tcx>, _ty_span: Span, interface_span: Span) {
+        let mut visitor = TypeIsExportableChecker { tcx: self.tcx, interface_span };
+        ty.visit_with(&mut visitor);
+    }
 
-        // TODO: skip binder safety?
+    /// Non-generic functions with a stable ABI (e.g. extern "C") for which every user
+    /// defined type used in the signature is also marked as #[export] are exportable.
+    fn check_fn(&self, def_id: LocalDefId, decl: &'tcx hir::FnDecl<'_>) {
+        if !self.check_generics(def_id) {
+            // An error has already been emitted.
+            return;
+        }
+
         let sig = self.tcx.fn_sig(def_id).instantiate_identity().skip_binder();
+        let span = self.tcx.def_span(def_id);
         if !matches!(sig.abi, Abi::C { .. }) {
             self.tcx
                 .dcx()
                 .emit_err(errors::UnexportableItem { descr: "non \"C\" ABI function", span });
         }
-
+        // TODO: clear way to process aliases
         let param_env = ty::ParamEnv::reveal_all();
         let sig = self.tcx.try_normalize_erasing_regions(param_env, sig).unwrap_or(sig);
 
-        for input in sig.inputs().iter() {
-            let mut visitor = TypeIsExportableChecker { tcx: self.tcx, span, is_ret: false };
-            input.visit_with(&mut visitor);
+        for (input_ty, input_hir) in iter::zip(sig.inputs(), decl.inputs) {
+            self.check(*input_ty, input_hir.span, span);
         }
-        let mut visitor = TypeIsExportableChecker { tcx: self.tcx, span, is_ret: true };
-        sig.output().visit_with(&mut visitor);
+
+        if let hir::FnRetTy::Return(ret_hir) = decl.output {
+            self.check(sig.output(), ret_hir.span, span);
+        }
     }
 
     /// Only structs/enums/unions with a stable representation (e.g. repr(i32) or repr(C)).
@@ -129,7 +155,7 @@ impl<'tcx> CheckExportVisitor<'tcx> {
         let ty = self.tcx.type_of(def_id).skip_binder();
         let param_env = ty::ParamEnv::reveal_all();
         let ty = self.tcx.try_normalize_erasing_regions(param_env, ty).unwrap_or(ty);
-        let mut visitor = TypeIsExportableChecker { tcx: self.tcx, span, is_ret: false };
+        let mut visitor = TypeIsExportableChecker { tcx: self.tcx, span };
         ty.visit_with(&mut visitor);
     }
 
@@ -140,6 +166,8 @@ impl<'tcx> CheckExportVisitor<'tcx> {
         });
     }
 
+    // TODO: add field to `CheckExportVisitor` for perf.
+    // TODO: `#[extern]` should be applied to types with public fields
     fn check_visibility(&self, def_id: LocalDefId) {
         let visibilities = self.tcx.effective_visibilities(());
         if self.tcx.has_attr(def_id, sym::export) && !visibilities.is_directly_public(def_id) {
@@ -157,17 +185,20 @@ impl<'tcx> CheckExportVisitor<'tcx> {
         }
     }
 
-    fn check_generics(&self, def_id: DefId) {
+    fn check_generics(&self, def_id: LocalDefId) -> bool {
         let span = self.tcx.def_span(def_id);
 
         let generics = self.tcx.generics_of(def_id);
         if generics.requires_monomorphization(self.tcx) {
             self.tcx.dcx().emit_err(errors::UnexportableItem { descr: "generic item", span });
+            return false;
         }
+        true
     }
 }
 
 impl<'tcx> Visitor<'tcx> for CheckExportVisitor<'tcx> {
+    // TODO: remove `All` filter
     type NestedFilter = nested_filter::All;
 
     fn nested_visit_map(&mut self) -> Self::Map {
@@ -182,14 +213,24 @@ impl<'tcx> Visitor<'tcx> for CheckExportVisitor<'tcx> {
         match item.kind {
             hir::ItemKind::Mod(m) => self.visit_mod(m, span, item.hir_id()),
             hir::ItemKind::TyAlias(..) => self.check_alias(def_id.to_def_id(), span),
-            hir::ItemKind::Fn(..) => self.check_fn(def_id.to_def_id()),
+            hir::ItemKind::Fn(sig, _, _) => self.check_fn(def_id, &sig.decl),
             hir::ItemKind::Struct(..) | hir::ItemKind::Enum(..) | hir::ItemKind::Union(..) => {
                 self.check_ty(def_id.to_def_id(), span);
             }
             hir::ItemKind::Use(path, _) => {
                 for res in &path.res {
                     match res {
-                        Res::Def(DefKind::Fn, res_id) => self.check_fn(*res_id),
+                        Res::Def(DefKind::Fn, res_id) => {
+                            let Some(local_res_id) = res_id.as_local() else {
+                                // Only local items can be exported.
+                                continue;
+                            };
+
+                            let hir_id = self.tcx.local_def_id_to_hir_id(local_res_id);
+                            let decl = self.tcx.hir().fn_decl_by_hir_id(hir_id).unwrap();
+
+                            self.check_fn(local_res_id, decl);
+                        }
                         Res::Def(DefKind::Struct | DefKind::Union | DefKind::Enum, res_id) => {
                             self.check_ty(*res_id, span)
                         }
@@ -199,7 +240,7 @@ impl<'tcx> Visitor<'tcx> for CheckExportVisitor<'tcx> {
                 }
             }
             hir::ItemKind::Impl(impl_) if impl_.of_trait.is_none() => {
-                self.check_generics(def_id.to_def_id());
+                self.check_generics(def_id);
                 intravisit::walk_item(self, item);
             }
             _ => self.report_wrong_site(def_id),
@@ -211,7 +252,7 @@ impl<'tcx> Visitor<'tcx> for CheckExportVisitor<'tcx> {
         self.check_visibility(def_id);
 
         match item.kind {
-            hir::ImplItemKind::Fn(..) => self.check_fn(def_id.to_def_id()),
+            hir::ImplItemKind::Fn(sig, _) => self.check_fn(def_id, &sig.decl),
             hir::ImplItemKind::Type(..) => self.check_alias(def_id.to_def_id(), item.span),
             _ => self.report_wrong_site(def_id),
         }
