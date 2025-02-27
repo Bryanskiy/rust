@@ -850,7 +850,7 @@ fn get_metadata_section<'p>(
                 .arg(&filename)
                 .arg("--emit=metadata")
                 .arg(format!("--crate-name={}", crate_name))
-                .arg("-Csymbol-mangling-version=v0")
+                .arg("-Zbuild-interface")
                 .output()
                 .map_err(|err| {
                     MetadataError::LoadFailure(format!("couldn't compile interface: {}", err))

@@ -3208,8 +3208,7 @@ impl<'tcx> TyCtxt<'tcx> {
     }
 
     pub fn is_interface_build(self) -> bool {
-        self.crate_types().contains(&rustc_session::config::CrateType::Sdylib)
-            && !self.sess.opts.output_types.should_codegen()
+        self.sess.opts.unstable_opts.build_interface
     }
 
     pub fn intrinsic(self, def_id: impl IntoQueryParam<DefId> + Copy) -> Option<ty::IntrinsicDef> {
