@@ -604,7 +604,6 @@ impl<'a> CrateLocator<'a> {
                 debug!("skipping empty file");
                 continue;
             }
-
             let (hash, metadata) = match get_metadata_section(
                 self.target,
                 flavor,
