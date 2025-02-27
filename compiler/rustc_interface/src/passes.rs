@@ -716,6 +716,25 @@ pub fn write_dep_info(tcx: TyCtxt<'_>) {
     }
 }
 
+pub fn write_interface<'tcx>(tcx: TyCtxt<'tcx>) {
+    if !(tcx.crate_types().contains(&rustc_session::config::CrateType::Sdylib)
+        && tcx.sess.opts.output_types.should_codegen())
+    {
+        return;
+    }
+    let (_, krate) = &*tcx.resolver_for_lowering().borrow();
+    let _timer = tcx.sess.timer("write_interface");
+
+    let krate = rustc_ast_pretty::pprust::print_crate_as_interface(
+        krate,
+        tcx.sess.psess.edition,
+        &tcx.sess.psess.attr_id_generator,
+    );
+    let export_output = tcx.output_filenames(()).interface_path();
+    let mut file = fs::File::create_buffered(export_output).unwrap();
+    let _ = write!(file, "{}", krate);
+}
+
 pub static DEFAULT_QUERY_PROVIDERS: LazyLock<Providers> = LazyLock::new(|| {
     let providers = &mut Providers::default();
     providers.analysis = analysis;

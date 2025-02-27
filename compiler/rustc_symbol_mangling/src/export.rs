@@ -165,8 +165,7 @@ impl<'tcx> AbiHashStable<'tcx> for ty::GenericArgKind<'tcx> {
     fn hash(&self, tcx: TyCtxt<'tcx>, hasher: &mut StableHasher) {
         match self {
             ty::GenericArgKind::Type(t) => t.hash(tcx, hasher),
-            ty::GenericArgKind::Lifetime(_)
-            | ty::GenericArgKind::Const(_) => unimplemented!(),
+            ty::GenericArgKind::Lifetime(_) | ty::GenericArgKind::Const(_) => unimplemented!(),
         }
     }
 }

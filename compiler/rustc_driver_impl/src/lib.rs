@@ -355,6 +355,8 @@ pub fn run_compiler(at_args: &[String], callbacks: &mut (dyn Callbacks + Send)) 
 
             passes::write_dep_info(tcx);
 
+            passes::write_interface(tcx);
+
             if sess.opts.output_types.contains_key(&OutputType::DepInfo)
                 && sess.opts.output_types.len() == 1
             {
@@ -370,8 +372,6 @@ pub fn run_compiler(at_args: &[String], callbacks: &mut (dyn Callbacks + Send)) 
             if callbacks.after_analysis(compiler, tcx) == Compilation::Stop {
                 return early_exit();
             }
-
-            rustc_interface::export::write_interface(tcx);
 
             Some(Linker::codegen_and_build_linker(tcx, &*compiler.codegen_backend))
         });
