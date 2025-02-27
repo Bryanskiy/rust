@@ -13,7 +13,6 @@ use rustc_middle::query::{LocalCrate, Providers};
 use rustc_middle::ty::{
     self, Ty, TyCtxt, TypeSuperVisitable, TypeVisitable, TypeVisitor, Visibility,
 };
-use rustc_session::config::SymbolManglingVersion;
 use rustc_span::{Span, sym};
 
 use crate::errors::UnexportableItem;
@@ -191,13 +190,6 @@ impl<'tcx, 'a> ExportableItemsChecker<'tcx, 'a> {
             DefKind::Fn | DefKind::AssocFn => self.check_fn(),
             DefKind::Enum | DefKind::Struct | DefKind::Union => self.check_ty(),
             _ => {}
-        }
-        if self.tcx.sess.opts.get_symbol_mangling_version() != SymbolManglingVersion::V0
-            && self.tcx.sess.opts.output_types.should_codegen()
-        {
-            self.tcx
-                .dcx()
-                .emit_err(UnexportableItem::ManglingScheme(self.tcx.def_span(self.item_id)));
         }
     }
 

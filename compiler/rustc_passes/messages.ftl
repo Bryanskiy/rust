@@ -746,8 +746,6 @@ passes_unexportable_generic_fn = generic functions are not exportable
 
 passes_unexportable_item = {$descr}'s are not exportable
 
-passes_unexportable_mangling_scheme = `#[export]` attribute is only usable with `v0` mangling scheme
-
 passes_unexportable_priv_item = private items are not exportable
     .note = is only usable at visibility `{$vis_descr}`
 

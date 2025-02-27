@@ -1883,9 +1883,6 @@ pub(crate) enum UnexportableItem<'a> {
     #[diag(passes_unexportable_generic_fn)]
     GenericFn(#[primary_span] Span),
 
-    #[diag(passes_unexportable_mangling_scheme)]
-    ManglingScheme(#[primary_span] Span),
-
     #[diag(passes_unexportable_fn_abi)]
     FnAbi(#[primary_span] Span),
 

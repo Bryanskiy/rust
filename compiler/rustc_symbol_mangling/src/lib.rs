@@ -262,12 +262,17 @@ fn compute_symbol_name<'tcx>(
         tcx.symbol_mangling_version(mangling_version_crate)
     };
 
-    let mut symbol = match mangling_version {
-        SymbolManglingVersion::Legacy => legacy::mangle(tcx, instance, instantiating_crate),
-        SymbolManglingVersion::V0 => v0::mangle(tcx, instance, instantiating_crate),
-        SymbolManglingVersion::Hashed => hashed::mangle(tcx, instance, instantiating_crate, || {
-            v0::mangle(tcx, instance, instantiating_crate)
-        }),
+    let mut symbol = match tcx.is_exportable(def_id) {
+        true => v0::mangle(tcx, instance, instantiating_crate),
+        false => match mangling_version {
+            SymbolManglingVersion::Legacy => legacy::mangle(tcx, instance, instantiating_crate),
+            SymbolManglingVersion::V0 => v0::mangle(tcx, instance, instantiating_crate),
+            SymbolManglingVersion::Hashed => {
+                hashed::mangle(tcx, instance, instantiating_crate, || {
+                    v0::mangle(tcx, instance, instantiating_crate)
+                })
+            }
+        },
     };
 
     debug_assert!(
@@ -276,8 +281,7 @@ fn compute_symbol_name<'tcx>(
     );
 
     // FIXME: Demangle support.
-    if tcx.exportable_items(def_id.krate).contains(&def_id) {
-        debug_assert_eq!(mangling_version, SymbolManglingVersion::V0);
+    if tcx.is_exportable(def_id) {
         let hash = export::compute_hash_of_export_fn(tcx, instance);
         symbol = format!("{}_{}", symbol, hash);
     }
