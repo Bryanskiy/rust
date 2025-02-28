@@ -2035,14 +2035,14 @@ impl<'tcx> TyCtxt<'tcx> {
                 CrateType::Executable
                 | CrateType::Staticlib
                 | CrateType::ProcMacro
-                | CrateType::Cdylib => false,
+                | CrateType::Cdylib
+                | CrateType::Sdylib => false,
 
                 // FIXME rust-lang/rust#64319, rust-lang/rust#64872:
                 // We want to block export of generics from dylibs,
                 // but we must fix rust-lang/rust#65890 before we can
                 // do that robustly.
                 CrateType::Dylib => true,
-                CrateType::Sdylib => true,
 
                 CrateType::Rlib => true,
             }

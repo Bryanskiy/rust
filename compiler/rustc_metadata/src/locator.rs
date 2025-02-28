@@ -857,15 +857,13 @@ fn get_metadata_section<'p>(
                 })?;
 
             if !res.status.success() {
-                // FIXME: Provide better diagnostic. Test: tests/run-make/export/compile_interface_error.
                 return Err(MetadataError::LoadFailure(format!(
-                    "couldn't compile interface: {:?}",
-                    std::str::from_utf8(&res.stderr)
+                    "couldn't compile interface: {}",
+                    std::str::from_utf8(&res.stderr).unwrap_or_default()
                 )));
             }
 
             // Load interface metadata instead of crate metadata.
-            // FIXME: It's better to use stdio here.
             let interface_metadata_name = format!("lib{}.rmeta", crate_name);
             let rmeta_file = interface_dir.join(interface_metadata_name);
             debug!("loading interface metadata from {}", rmeta_file.display());

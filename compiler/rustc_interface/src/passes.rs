@@ -717,8 +717,8 @@ pub fn write_dep_info(tcx: TyCtxt<'_>) {
 }
 
 pub fn write_interface<'tcx>(tcx: TyCtxt<'tcx>) {
-    if !(tcx.crate_types().contains(&rustc_session::config::CrateType::Sdylib)
-        && tcx.sess.opts.output_types.should_codegen())
+    if !tcx.crate_types().contains(&rustc_session::config::CrateType::Sdylib)
+        || tcx.is_interface_build()
     {
         return;
     }
