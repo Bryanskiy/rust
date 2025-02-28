@@ -722,8 +722,8 @@ pub fn write_interface<'tcx>(tcx: TyCtxt<'tcx>) {
     {
         return;
     }
-    let (_, krate) = &*tcx.resolver_for_lowering().borrow();
     let _timer = tcx.sess.timer("write_interface");
+    let (_, krate) = &*tcx.resolver_for_lowering().borrow();
 
     let krate = rustc_ast_pretty::pprust::print_crate_as_interface(
         krate,
@@ -732,7 +732,9 @@ pub fn write_interface<'tcx>(tcx: TyCtxt<'tcx>) {
     );
     let export_output = tcx.output_filenames(()).interface_path();
     let mut file = fs::File::create_buffered(export_output).unwrap();
-    let _ = write!(file, "{}", krate);
+    if let Err(err) = write!(file, "{}", krate) {
+        tcx.dcx().fatal(format!("error writing interface file: {}", err));
+    }
 }
 
 pub static DEFAULT_QUERY_PROVIDERS: LazyLock<Providers> = LazyLock::new(|| {
