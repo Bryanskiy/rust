@@ -1421,6 +1421,13 @@ pub(crate) struct IncorrectTarget<'a> {
     pub at_least: bool,
 }
 
+#[derive(Diagnostic)]
+#[diag(passes_incorrect_crate_type)]
+pub(crate) struct IncorrectCrateType {
+    #[primary_span]
+    pub span: Span,
+}
+
 #[derive(LintDiagnostic)]
 #[diag(passes_useless_assignment)]
 pub(crate) struct UselessAssignment<'a> {
