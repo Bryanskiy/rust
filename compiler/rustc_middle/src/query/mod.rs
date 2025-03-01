@@ -2007,10 +2007,6 @@ rustc_queries! {
         desc { |tcx| "computing crate imported by `{}`", tcx.def_path_str(def_id) }
     }
 
-    query is_extern_dyn_crate(cnum: CrateNum) -> bool {
-        desc { "checking whether crate `{}` has a stable interface", cnum }
-    }
-
     /// Gets the number of definitions in a foreign crate.
     ///
     /// This allows external tools to iterate over all definitions in a foreign crate.

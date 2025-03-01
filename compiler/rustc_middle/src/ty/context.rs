@@ -3303,8 +3303,6 @@ pub fn provide(providers: &mut Providers) {
         ))
     };
 
-    providers.is_extern_dyn_crate = |tcx, id| tcx.resolutions(()).extern_dyn_crates.contains(&id);
-
     providers.extern_mod_stmt_cnum =
         |tcx, id| tcx.resolutions(()).extern_crate_map.get(&id).cloned();
     providers.is_panic_runtime =

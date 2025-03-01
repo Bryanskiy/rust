@@ -920,9 +920,6 @@ impl<'a, 'ra, 'tcx> BuildReducedGraphVisitor<'a, 'ra, 'tcx> {
             });
             crate_id.map(|crate_id| {
                 self.r.extern_crate_map.insert(local_def_id, crate_id);
-                if let ItemKind::ExternDynCrate(_) = item.kind {
-                    self.r.extern_dyn_crates.insert(crate_id);
-                }
                 self.r.expect_module(crate_id.as_def_id())
             })
         }
