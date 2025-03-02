@@ -841,15 +841,24 @@ fn get_metadata_section<'p>(
                         .to_string(),
                 )
             })?;
-            debug!("compiling {}", filename.display());
 
-            let interface_dir = filename.parent().unwrap();
+            let tmp_path = match tempfile::tempdir() {
+                Ok(tmp_path) => tmp_path,
+                Err(error) => {
+                    return Err(MetadataError::LoadFailure(format!(
+                        "Cannot create temporary directory: {}",
+                        error
+                    )));
+                }
+            };
+
             let crate_name = dyn_crate.unwrap();
-
+            debug!("compiling {}", filename.display());
             let res = std::process::Command::new(compiler)
                 .arg(&filename)
                 .arg("--emit=metadata")
                 .arg(format!("--crate-name={}", crate_name))
+                .arg(format!("--out-dir={}", tmp_path.path().display()))
                 .arg("-Zbuild-interface")
                 .output()
                 .map_err(|err| {
@@ -865,7 +874,7 @@ fn get_metadata_section<'p>(
 
             // Load interface metadata instead of crate metadata.
             let interface_metadata_name = format!("lib{}.rmeta", crate_name);
-            let rmeta_file = interface_dir.join(interface_metadata_name);
+            let rmeta_file = tmp_path.path().join(interface_metadata_name);
             debug!("loading interface metadata from {}", rmeta_file.display());
             let rmeta = get_rmeta_metadata_section(&rmeta_file)?;
             let _ = std::fs::remove_file(rmeta_file);
