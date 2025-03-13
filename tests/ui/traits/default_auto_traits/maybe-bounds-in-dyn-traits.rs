@@ -37,9 +37,6 @@ impl<'a, T: ?Sized + ?Leak + Unsize<U>, U: ?Sized + ?Leak> DispatchFromDyn<&'a U
 #[lang = "default_trait1"]
 auto trait Leak {}
 
-#[lang = "default_trait2"]
-auto trait SyncDrop {}
-
 struct NonLeakS;
 impl !Leak for NonLeakS {}
 struct LeakS;
@@ -52,10 +49,6 @@ trait Trait {
 impl Trait for NonLeakS {}
 impl Trait for LeakS {}
 
-// add implicit supertraits
-trait Trait2<T = Self> {}
-impl<T> Trait2<T> for LeakS {}
-
 fn main() {
     let _: &dyn Trait = &NonLeakS;
     //~^ ERROR the trait bound `NonLeakS: Leak` is not satisfied
@@ -63,6 +56,6 @@ fn main() {
     let _: &(dyn Trait + ?Leak) = &LeakS;
     let x: &(dyn Trait + ?Leak) = &NonLeakS;
     x.leak_foo();
-    //~^ ERROR the trait bound `dyn Trait + SyncDrop: Leak` is not satisfied
+    //~^ ERROR the trait bound `dyn Trait: Leak` is not satisfied
     x.maybe_leak_foo();
 }

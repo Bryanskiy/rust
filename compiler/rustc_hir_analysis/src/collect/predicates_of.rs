@@ -245,7 +245,7 @@ fn gather_explicit_predicates_of(tcx: TyCtxt<'_>, def_id: LocalDefId) -> ty::Gen
             GenericParamKind::Type { .. } => {
                 let param_ty = icx.lowerer().lower_ty_param(param.hir_id);
                 let mut bounds = Vec::new();
-                // // Implicit bounds are added to type params unless a `?Trait` bound is found
+                // Implicit bounds are added to type params unless a `?Trait` bound is found
                 icx.lowerer().add_implicit_traits(
                     &mut bounds,
                     param_ty,
