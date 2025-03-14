@@ -1,5 +1,5 @@
 error[E0277]: the trait bound `NonLeakS: Leak` is not satisfied
-  --> $DIR/maybe-bounds-in-dyn-traits.rs:57:25
+  --> $DIR/maybe-bounds-in-dyn-traits.rs:53:25
    |
 LL |     let _: &dyn Trait = &NonLeakS;
    |                         ^^^^^^^^^ the trait `Leak` is not implemented for `NonLeakS`
@@ -7,7 +7,7 @@ LL |     let _: &dyn Trait = &NonLeakS;
    = note: required for the cast from `&NonLeakS` to `&dyn Trait + Leak`
 
 error[E0277]: the trait bound `dyn Trait: Leak` is not satisfied
-  --> $DIR/maybe-bounds-in-dyn-traits.rs:62:7
+  --> $DIR/maybe-bounds-in-dyn-traits.rs:58:7
    |
 LL |     x.leak_foo();
    |       ^^^^^^^^ the trait `Leak` is not implemented for `dyn Trait`
