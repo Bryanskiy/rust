@@ -745,6 +745,7 @@ impl<'a> CrateLocator<'a> {
         let mut rlibs = FxIndexMap::default();
         let mut rmetas = FxIndexMap::default();
         let mut dylibs = FxIndexMap::default();
+        let mut sdylib_interfaces = FxIndexMap::default();
         for loc in &self.exact_paths {
             let loc_canon = loc.canonicalized();
             let loc_orig = loc.original();
@@ -772,6 +773,9 @@ impl<'a> CrateLocator<'a> {
                     rmetas.insert(loc_canon.clone(), PathKind::ExternFlag);
                     continue;
                 }
+                if file.ends_with(".rs") {
+                    sdylib_interfaces.insert(loc_canon.clone(), PathKind::ExternFlag);
+                }
             }
             let dll_prefix = self.target.dll_prefix.as_ref();
             let dll_suffix = self.target.dll_suffix.as_ref();
@@ -785,7 +789,7 @@ impl<'a> CrateLocator<'a> {
         }
 
         // Extract the dylib/rlib/rmeta triple.
-        self.extract_lib(rlibs, rmetas, dylibs, FxIndexMap::default())
+        self.extract_lib(rlibs, rmetas, dylibs, sdylib_interfaces)
             .map(|opt| opt.map(|(_, lib)| lib))
     }
 

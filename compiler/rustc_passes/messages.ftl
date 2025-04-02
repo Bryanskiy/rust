@@ -631,8 +631,6 @@ passes_remove_fields =
      *[other] fields
     }
 
-passes_report_stable_impl_id = stable impl id: {$id}
-
 passes_repr_align_function =
     `repr(align)` attributes on functions are unstable
 
