@@ -673,10 +673,12 @@ impl<'a, 'tcx> EncodeContext<'a, 'tcx> {
         let debugger_visualizers =
             stat!("debugger-visualizers", || self.encode_debugger_visualizers());
 
-        let exportable_items = stat!("exportable-items", || self.encode_exportable_items());
+        if self.tcx.is_sdylib_interface_build() {
+            let exportable_items = stat!("exportable-items", || self.encode_exportable_items());
 
-        let stable_order_of_exportable_impls =
-            stat!("exportable-items", || self.encode_stable_order_of_exportable_impls());
+            let stable_order_of_exportable_impls =
+                stat!("exportable-items", || self.encode_stable_order_of_exportable_impls());
+        }
 
         // Encode exported symbols info. This is prefetched in `encode_metadata`.
         let exported_symbols = stat!("exported-symbols", || {

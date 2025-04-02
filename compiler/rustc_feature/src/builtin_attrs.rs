@@ -508,7 +508,7 @@ pub static BUILTIN_ATTRIBUTES: &[BuiltinAttribute] = &[
 
     gated!(
         export, Normal, template!(Word), WarnFollowing,
-        EncodeCrossCrate::Yes, experimental!(export)
+        EncodeCrossCrate::No, experimental!(export)
     ),
 
     // Testing:
