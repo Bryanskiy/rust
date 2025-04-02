@@ -181,6 +181,11 @@ pub fn collect_crate_types(session: &Session, attrs: &[ast::Attribute]) -> Vec<C
         return vec![CrateType::Executable];
     }
 
+    // Shadow `sdylib` crate type in interface build.
+    if session.opts.unstable_opts.build_interface {
+        return vec![CrateType::Rlib];
+    }
+
     // Only check command line flags if present. If no types are specified by
     // command line, then reuse the empty `base` Vec to hold the types that
     // will be found in crate attributes.

@@ -1,6 +1,6 @@
 //@ compile-flags: -Zunstable-options -Csymbol-mangling-version=v0
 
-#![crate_type = "dylib"]
+#![crate_type = "sdylib"]
 #![allow(incomplete_features, improper_ctypes_definitions)]
 #![feature(export)]
 #![feature(inherent_associated_types)]

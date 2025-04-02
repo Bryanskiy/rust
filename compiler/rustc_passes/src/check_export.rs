@@ -13,6 +13,7 @@ use rustc_middle::query::{LocalCrate, Providers};
 use rustc_middle::ty::{
     self, Ty, TyCtxt, TypeSuperVisitable, TypeVisitable, TypeVisitor, Visibility,
 };
+use rustc_session::config::CrateType;
 use rustc_span::{Span, sym};
 
 use crate::errors::UnexportableItem;
@@ -323,6 +324,10 @@ impl<'tcx, 'a> TypeVisitor<TyCtxt<'tcx>> for ExportableItemsChecker<'tcx, 'a> {
 /// 3. Non-generic functions with a stable ABI (e.g. extern "C") for which every user
 ///    defined type used in the signature is also marked as `#[export]`.
 fn exportable_items_provider_local<'tcx>(tcx: TyCtxt<'tcx>, _: LocalCrate) -> &'tcx [DefId] {
+    if !tcx.crate_types().contains(&CrateType::Sdylib) && !tcx.is_sdylib_interface_build() {
+        return &[];
+    }
+
     let mut visitor = ExportableItemCollector::new(tcx);
     tcx.hir_walk_toplevel_module(&mut visitor);
     let exportable_items = visitor.exportable_items;
@@ -375,6 +380,10 @@ fn stable_order_of_exportable_impls<'tcx>(
     tcx: TyCtxt<'tcx>,
     _: LocalCrate,
 ) -> &'tcx FxIndexMap<DefId, usize> {
+    if !tcx.crate_types().contains(&CrateType::Sdylib) && !tcx.is_sdylib_interface_build() {
+        return tcx.arena.alloc(FxIndexMap::<DefId, usize>::default());
+    }
+
     let mut vis = ImplsOrderVisitor::new(tcx);
     tcx.hir_walk_toplevel_module(&mut vis);
     tcx.arena.alloc(vis.order)

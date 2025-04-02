@@ -747,9 +747,7 @@ pub fn write_dep_info(tcx: TyCtxt<'_>) {
 }
 
 pub fn write_interface<'tcx>(tcx: TyCtxt<'tcx>) {
-    if !tcx.crate_types().contains(&rustc_session::config::CrateType::Sdylib)
-        || tcx.is_sdylib_interface_build()
-    {
+    if !tcx.crate_types().contains(&rustc_session::config::CrateType::Sdylib) {
         return;
     }
     let _timer = tcx.sess.timer("write_interface");
@@ -938,10 +936,8 @@ fn run_required_analyses(tcx: TyCtxt<'_>) {
                 CStore::from_tcx(tcx).report_unused_deps(tcx);
             },
             {
-                if tcx.crate_types().contains(&CrateType::Sdylib) {
-                    tcx.ensure_ok().exportable_items(LOCAL_CRATE);
-                    tcx.ensure_ok().stable_order_of_exportable_impls(LOCAL_CRATE);
-                }
+                tcx.ensure_ok().exportable_items(LOCAL_CRATE);
+                tcx.ensure_ok().stable_order_of_exportable_impls(LOCAL_CRATE);
                 tcx.par_hir_for_each_module(|module| {
                     tcx.ensure_ok().check_mod_loops(module);
                     tcx.ensure_ok().check_mod_attrs(module);

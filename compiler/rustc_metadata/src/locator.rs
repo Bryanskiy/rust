@@ -522,6 +522,10 @@ impl<'a> CrateLocator<'a> {
         let sdylib_interface = self.extract_one(interfaces, CrateFlavor::SDylib, &mut slot)?;
         let dylib = self.extract_one(dylibs, CrateFlavor::Dylib, &mut slot)?;
 
+        if sdylib_interface.is_some() && dylib.is_none() {
+            return Err(CrateError::FullMetadataNotFound(self.crate_name, CrateFlavor::SDylib));
+        }
+
         let source = CrateSource { rmeta, rlib, dylib, sdylib_interface };
         Ok(slot.map(|(svh, metadata, _, _)| (svh, Library { source, metadata })))
     }
@@ -615,7 +619,7 @@ impl<'a> CrateLocator<'a> {
                 Err(MetadataError::LoadFailure(err)) => {
                     info!("no metadata found: {}", err);
                     // Metadata was loaded from interface file earlier.
-                    if let Some((_, _, _, CrateFlavor::SDylib)) = slot {
+                    if let Some((.., CrateFlavor::SDylib)) = slot {
                         ret = Some((lib, kind));
                         continue;
                     }
@@ -745,6 +749,7 @@ impl<'a> CrateLocator<'a> {
         let mut rlibs = FxIndexMap::default();
         let mut rmetas = FxIndexMap::default();
         let mut dylibs = FxIndexMap::default();
+        let mut sdylib_interfaces = FxIndexMap::default();
         for loc in &self.exact_paths {
             let loc_canon = loc.canonicalized();
             let loc_orig = loc.original();
@@ -772,6 +777,9 @@ impl<'a> CrateLocator<'a> {
                     rmetas.insert(loc_canon.clone(), PathKind::ExternFlag);
                     continue;
                 }
+                if file.ends_with(".rs") {
+                    sdylib_interfaces.insert(loc_canon.clone(), PathKind::ExternFlag);
+                }
             }
             let dll_prefix = self.target.dll_prefix.as_ref();
             let dll_suffix = self.target.dll_suffix.as_ref();
@@ -785,7 +793,7 @@ impl<'a> CrateLocator<'a> {
         }
 
         // Extract the dylib/rlib/rmeta triple.
-        self.extract_lib(rlibs, rmetas, dylibs, FxIndexMap::default())
+        self.extract_lib(rlibs, rmetas, dylibs, sdylib_interfaces)
             .map(|opt| opt.map(|(_, lib)| lib))
     }
 
@@ -819,7 +827,7 @@ fn get_metadata_section<'p>(
         CrateFlavor::SDylib => {
             let compiler = std::env::current_exe().map_err(|_err| {
                 MetadataError::LoadFailure(
-                    "couldn't obtain current compiler binary when loading `extern dyn` dependency"
+                    "couldn't obtain current compiler binary when loading sdylib interface"
                         .to_string(),
                 )
             })?;
@@ -828,7 +836,7 @@ fn get_metadata_section<'p>(
                 Ok(tmp_path) => tmp_path,
                 Err(error) => {
                     return Err(MetadataError::LoadFailure(format!(
-                        "Cannot create temporary directory: {}",
+                        "couldn't create a temp dir: {}",
                         error
                     )));
                 }
@@ -841,7 +849,6 @@ fn get_metadata_section<'p>(
                 .arg("--emit=metadata")
                 .arg(format!("--crate-name={}", crate_name))
                 .arg(format!("--out-dir={}", tmp_path.path().display()))
-                .arg("--crate-type=rlib") // shadow `sdylib` crate type in interface build
                 .arg("-Zbuild-interface")
                 .output()
                 .map_err(|err| {

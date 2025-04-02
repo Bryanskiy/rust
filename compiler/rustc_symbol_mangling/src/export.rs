@@ -105,6 +105,8 @@ impl<'tcx> AbiHashStable<'tcx> for Ty<'tcx> {
                 args.abi_hash(tcx, hasher);
             }
 
+            ty::Tuple(args) if args.len() == 0 => {}
+
             // FIXME: Not yet supported.
             ty::Foreign(_)
             | ty::Ref(_, _, _)

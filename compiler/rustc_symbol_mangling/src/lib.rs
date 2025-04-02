@@ -299,31 +299,27 @@ fn compute_symbol_name<'tcx>(
         tcx.symbol_mangling_version(mangling_version_crate)
     };
 
-    match tcx.is_exportable(def_id) {
+    let symbol = match tcx.is_exportable(def_id) {
         true => format!(
-            "{}_{}",
+            "{}.{}",
             v0::mangle(tcx, instance, instantiating_crate, true),
             export::compute_hash_of_export_fn(tcx, instance)
         ),
-        false => {
-            let symbol = match mangling_version {
-                SymbolManglingVersion::Legacy => legacy::mangle(tcx, instance, instantiating_crate),
-                SymbolManglingVersion::V0 => v0::mangle(tcx, instance, instantiating_crate, false),
-                SymbolManglingVersion::Hashed => {
-                    hashed::mangle(tcx, instance, instantiating_crate, || {
-                        v0::mangle(tcx, instance, instantiating_crate, false)
-                    })
-                }
-            };
-
-            debug_assert!(
-                rustc_demangle::try_demangle(&symbol).is_ok(),
-                "compute_symbol_name: `{symbol}` cannot be demangled"
-            );
-
-            symbol
-        }
-    }
+        false => match mangling_version {
+            SymbolManglingVersion::Legacy => legacy::mangle(tcx, instance, instantiating_crate),
+            SymbolManglingVersion::V0 => v0::mangle(tcx, instance, instantiating_crate, false),
+            SymbolManglingVersion::Hashed => {
+                hashed::mangle(tcx, instance, instantiating_crate, || {
+                    v0::mangle(tcx, instance, instantiating_crate, false)
+                })
+            }
+        },
+    };
+    debug_assert!(
+        rustc_demangle::try_demangle(&symbol).is_ok(),
+        "compute_symbol_name: `{symbol}` cannot be demangled"
+    );
+    symbol
 }
 
 fn is_generic<'tcx>(instance: Instance<'tcx>) -> bool {
