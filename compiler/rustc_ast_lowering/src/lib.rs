@@ -2106,12 +2106,12 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
                 }
             }
             RelaxedBoundPolicy::Forbidden(reason) => {
-                if self.tcx.features().more_maybe_bounds() {
-                    return;
-                }
-
                 match reason {
                     RelaxedBoundForbiddenReason::TraitObjectTy => {
+                        if self.tcx.features().more_maybe_bounds() {
+                            return;
+                        }
+
                         self.dcx().span_err(
                             span,
                             "relaxed bounds are not permitted in trait object types",
@@ -2119,6 +2119,10 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
                         return;
                     }
                     RelaxedBoundForbiddenReason::SuperTrait => {
+                        if self.tcx.features().more_maybe_bounds() {
+                            return;
+                        }
+
                         let mut diag = self.dcx().struct_span_err(
                             span,
                             "relaxed bounds are not permitted in supertrait bounds",
