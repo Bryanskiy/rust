@@ -2101,9 +2101,6 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
                 {
                     return;
                 }
-                if self.tcx.features().more_maybe_bounds() {
-                    return;
-                }
             }
             RelaxedBoundPolicy::Forbidden(reason) => {
                 match reason {
