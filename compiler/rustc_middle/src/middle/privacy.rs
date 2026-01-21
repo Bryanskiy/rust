@@ -242,13 +242,18 @@ impl<Id: Eq + Hash> EffectiveVisibilities<Id> {
                 if !(inherited_effective_vis_at_prev_level == inherited_effective_vis_at_level
                     && level != l)
                 {
-                    calculated_effective_vis = if let Some(max_vis) = max_vis
+                    calculated_effective_vis = if l == Level::ReachableThroughImplTrait {
+                        // All effective visibilities except `reachable_through_impl_trait` are limited to
+                        // nominal visibility. If any type or trait is leaked farther than that, it will
+                        // produce type privacy errors on any use, so we don't consider it leaked.
+                        inherited_effective_vis_at_level
+                    } else if let Some(max_vis) = max_vis
                         && !max_vis.is_at_least(inherited_effective_vis_at_level, tcx)
                     {
                         max_vis
                     } else {
                         inherited_effective_vis_at_level
-                    }
+                    };
                 }
                 // effective visibility can't be decreased at next update call for the
                 // same id

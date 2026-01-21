@@ -447,16 +447,14 @@ impl<'tcx> EmbargoVisitor<'tcx> {
         // FIXME(typed_def_id): Make `Visibility::Restricted` use a `LocalModDefId` by default.
         let private_vis =
             ty::Visibility::Restricted(self.tcx.parent_module_from_def_id(def_id).into());
-        if max_vis != Some(private_vis) {
-            self.changed |= self.effective_visibilities.update(
-                def_id,
-                max_vis,
-                || private_vis,
-                inherited_effective_vis,
-                level,
-                self.tcx,
-            );
-        }
+        self.changed |= self.effective_visibilities.update(
+            def_id,
+            max_vis,
+            || private_vis,
+            inherited_effective_vis,
+            level,
+            self.tcx,
+        );
     }
 
     fn reach(
@@ -845,11 +843,7 @@ impl<'tcx> DefIdVisitor<'tcx> for ReachEverythingInTheInterfaceVisitor<'_, 'tcx>
     }
     fn visit_def_id(&mut self, def_id: DefId, _kind: &str, _descr: &dyn fmt::Display) {
         if let Some(def_id) = def_id.as_local() {
-            // All effective visibilities except `reachable_through_impl_trait` are limited to
-            // nominal visibility. If any type or trait is leaked farther than that, it will
-            // produce type privacy errors on any use, so we don't consider it leaked.
-            let max_vis = (self.level != Level::ReachableThroughImplTrait)
-                .then(|| self.ev.tcx.local_visibility(def_id));
+            let max_vis = Some(self.ev.tcx.local_visibility(def_id));
             self.ev.update_eff_vis(def_id, self.effective_vis, max_vis, self.level);
         }
     }
