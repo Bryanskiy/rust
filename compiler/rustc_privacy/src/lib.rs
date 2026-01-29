@@ -678,6 +678,10 @@ impl<'tcx> EmbargoVisitor<'tcx> {
                         let mut reach = self.reach(def_id, item_ev);
                         reach.generics().predicates();
 
+                        if assoc_item.is_type() {
+                            reach.bounds();
+                        }
+
                         if assoc_item.is_type() && !assoc_item.defaultness(tcx).has_value() {
                             // No type to visit.
                         } else {
@@ -833,6 +837,11 @@ impl ReachEverythingInTheInterfaceVisitor<'_, '_> {
 
     fn trait_ref(&mut self) -> &mut Self {
         self.visit_trait(self.ev.tcx.impl_trait_ref(self.item_def_id).instantiate_identity());
+        self
+    }
+
+    fn bounds(&mut self) -> &mut Self {
+        self.visit_clauses(self.ev.tcx.explicit_item_bounds(self.item_def_id).skip_binder());
         self
     }
 }
