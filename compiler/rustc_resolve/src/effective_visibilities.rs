@@ -1,14 +1,17 @@
+use std::cmp::Ordering;
+use std::collections::BinaryHeap;
 use std::mem;
 
 use rustc_ast::visit::Visitor;
 use rustc_ast::{Crate, EnumDef, ast, visit};
 use rustc_data_structures::fx::FxHashSet;
+use rustc_hir::def::DefKind;
 use rustc_hir::def_id::{CRATE_DEF_ID, LocalDefId};
 use rustc_middle::middle::privacy::{EffectiveVisibilities, EffectiveVisibility, Level};
-use rustc_middle::ty::Visibility;
+use rustc_middle::ty::{TyCtxt, Visibility};
 use tracing::info;
 
-use crate::{Decl, DeclKind, Resolver};
+use crate::{Decl, DeclKind, Res, Resolver};
 
 #[derive(Clone, Copy)]
 enum ParentId<'ra> {
@@ -34,7 +37,13 @@ pub(crate) struct EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
     import_effective_visibilities: EffectiveVisibilities<Decl<'ra>>,
     // It's possible to recalculate this at any point, but it's relatively expensive.
     current_private_vis: Visibility,
-    changed: bool,
+    /// Priority queue for bindings. They are processed in descending order of nominal
+    /// visibility (most public first). This ensures that when we visit a binding,
+    /// we have already computed the maximum possible effective visibility of its parent module
+    /// including possible reexports. As a result, we can calculate effective visibility of
+    /// a binding without needing to revisit nodes.
+    heap: BinaryHeap<UpdateStep<'ra, 'tcx>>,
+    visited: FxHashSet<Decl<'ra>>,
 }
 
 impl Resolver<'_, '_> {
@@ -63,6 +72,39 @@ impl Resolver<'_, '_> {
     }
 }
 
+#[derive(Copy, Clone)]
+struct UpdateStep<'ra, 'tcx> {
+    parent_mod: LocalDefId,
+    binding: Decl<'ra>,
+    tcx: TyCtxt<'tcx>,
+}
+
+impl<'ra, 'tcx> PartialEq for UpdateStep<'ra, 'tcx> {
+    fn eq(&self, other: &Self) -> bool {
+        self.binding.eq(&other.binding)
+    }
+}
+
+impl<'ra, 'tcx> Eq for UpdateStep<'ra, 'tcx> {}
+
+impl<'ra, 'tcx> Ord for UpdateStep<'ra, 'tcx> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap_or(Ordering::Equal)
+    }
+}
+
+impl<'ra, 'tcx> PartialOrd for UpdateStep<'ra, 'tcx> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.binding.vis().partial_cmp(other.binding.vis(), self.tcx)
+    }
+}
+
+impl<'ra, 'tcx> UpdateStep<'ra, 'tcx> {
+    fn new(tcx: TyCtxt<'tcx>, parent_mod: LocalDefId, binding: Decl<'ra>) -> UpdateStep<'ra, 'tcx> {
+        UpdateStep { tcx, parent_mod, binding }
+    }
+}
+
 impl<'a, 'ra, 'tcx> EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
     /// Fills the `Resolver::effective_visibilities` table with public & exported items
     /// For now, this doesn't resolve macros (FIXME) and cannot resolve Impl, as we
@@ -75,17 +117,38 @@ impl<'a, 'ra, 'tcx> EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
             r,
             def_effective_visibilities: Default::default(),
             import_effective_visibilities: Default::default(),
+            heap: Default::default(),
+            visited: Default::default(),
             current_private_vis: Visibility::Restricted(CRATE_DEF_ID),
-            changed: true,
         };
 
         visitor.def_effective_visibilities.update_root();
-        visitor.set_bindings_effective_visibilities(CRATE_DEF_ID);
+        visitor.collect_module_bindings(CRATE_DEF_ID);
 
-        while visitor.changed {
-            visitor.changed = false;
-            visit::walk_crate(&mut visitor, krate);
+        while let Some(UpdateStep { parent_mod, binding, tcx: _ }) = visitor.heap.pop() {
+            if visitor.visited.contains(&binding) {
+                continue;
+            }
+
+            visitor.current_private_vis = Visibility::Restricted(parent_mod);
+            visitor.update_binding_effective_visibility(parent_mod, binding);
+
+            if !binding.is_import()
+                && let Res::Def(DefKind::Mod | DefKind::Enum | DefKind::Trait, module_id) =
+                    binding.res()
+                && let Some(module_id) = module_id.as_local()
+            {
+                visitor.collect_module_bindings(module_id);
+            }
+
+            visitor.visited.insert(binding);
         }
+
+        // Update effective visibilities of the ADT's fields, since we can't check
+        // them during bindings traversal.
+        visitor.current_private_vis = Visibility::Restricted(CRATE_DEF_ID);
+        visit::walk_crate(&mut visitor, krate);
+
         visitor.r.effective_visibilities = visitor.def_effective_visibilities;
 
         let mut exported_ambiguities = FxHashSet::default();
@@ -97,7 +160,7 @@ impl<'a, 'ra, 'tcx> EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
         for (decl, eff_vis) in visitor.import_effective_visibilities.iter() {
             let DeclKind::Import { import, .. } = decl.kind else { unreachable!() };
             if let Some(node_id) = import.id() {
-                r.effective_visibilities.update_eff_vis(r.local_def_id(node_id), eff_vis, r.tcx)
+                r.effective_visibilities.update_eff_vis(r.local_def_id(node_id), eff_vis, r.tcx);
             }
             if decl.ambiguity.get().is_some() && eff_vis.is_public_at_level(Level::Reexported) {
                 exported_ambiguities.insert(*decl);
@@ -109,26 +172,15 @@ impl<'a, 'ra, 'tcx> EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
         exported_ambiguities
     }
 
-    /// Update effective visibilities of name declarations in the given module,
-    /// including their whole reexport chains.
-    fn set_bindings_effective_visibilities(&mut self, module_id: LocalDefId) {
+    fn collect_module_bindings(&mut self, module_id: LocalDefId) {
         let module = self.r.expect_module(module_id.to_def_id());
         for (_, name_resolution) in self.r.resolutions(module).borrow().iter() {
-            let Some(mut decl) = name_resolution.borrow().best_decl() else {
+            let Some(decl) = name_resolution.borrow().best_decl() else {
                 continue;
             };
-            // Set the given effective visibility level to `Level::Direct` and
-            // sets the rest of the `use` chain to `Level::Reexported` until
-            // we hit the actual exported item.
-            let mut parent_id = ParentId::Def(module_id);
-            while let DeclKind::Import { source_decl, .. } = decl.kind {
-                self.update_import(decl, parent_id);
-                parent_id = ParentId::Import(decl);
-                decl = source_decl;
-            }
-            if let Some(def_id) = decl.res().opt_def_id().and_then(|id| id.as_local()) {
-                self.update_def(def_id, decl.vis().expect_local(), parent_id);
-            }
+
+            let state = UpdateStep::new(self.r.tcx, module_id, decl);
+            self.heap.push(state);
         }
     }
 
@@ -142,6 +194,21 @@ impl<'a, 'ra, 'tcx> EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
             ParentId::Import(binding) => self
                 .import_effective_visibilities
                 .effective_vis_or_private(binding, || self.r.private_vis_import(binding)),
+        }
+    }
+
+    /// Update effective visibility of a name declaration in the given module,
+    /// including its whole reexport chain.
+    fn update_binding_effective_visibility(&mut self, parent_mod: LocalDefId, mut decl: Decl<'ra>) {
+        let mut parent_id = ParentId::Def(parent_mod);
+        while let DeclKind::Import { source_decl, import: _ } = decl.kind {
+            self.update_import(decl, parent_id);
+            parent_id = ParentId::Import(decl);
+            decl = source_decl;
+        }
+
+        if let Some(def_id) = decl.res().opt_def_id().and_then(|id| id.as_local()) {
+            self.update_def(def_id, decl.vis().expect_local(), parent_id);
         }
     }
 
@@ -174,7 +241,7 @@ impl<'a, 'ra, 'tcx> EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
         let Some(cheap_private_vis) = self.may_update(nominal_vis, parent_id) else { return };
         let inherited_eff_vis = self.effective_vis_or_private(parent_id);
         let tcx = self.r.tcx;
-        self.changed |= self.import_effective_visibilities.update(
+        self.import_effective_visibilities.update(
             decl,
             Some(nominal_vis),
             || cheap_private_vis.unwrap_or_else(|| self.r.private_vis_import(decl)),
@@ -193,7 +260,7 @@ impl<'a, 'ra, 'tcx> EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
         let Some(cheap_private_vis) = self.may_update(nominal_vis, parent_id) else { return };
         let inherited_eff_vis = self.effective_vis_or_private(parent_id);
         let tcx = self.r.tcx;
-        self.changed |= self.def_effective_visibilities.update(
+        self.def_effective_visibilities.update(
             def_id,
             Some(nominal_vis),
             || cheap_private_vis.unwrap_or_else(|| self.r.private_vis_def(def_id)),
@@ -211,8 +278,7 @@ impl<'a, 'ra, 'tcx> EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
 impl<'a, 'ra, 'tcx> Visitor<'a> for EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
     fn visit_item(&mut self, item: &'a ast::Item) {
         let def_id = self.r.local_def_id(item.id);
-        // Update effective visibilities of nested items.
-        // If it's a mod, also make the visitor walk all of its items
+        // Update effective visibilities of the ADT's fields.
         match item.kind {
             // Resolved in rustc_privacy when types are available
             ast::ItemKind::Impl(..) => return,
@@ -225,13 +291,11 @@ impl<'a, 'ra, 'tcx> Visitor<'a> for EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> 
             ast::ItemKind::Mod(..) => {
                 let prev_private_vis =
                     mem::replace(&mut self.current_private_vis, Visibility::Restricted(def_id));
-                self.set_bindings_effective_visibilities(def_id);
                 visit::walk_item(self, item);
                 self.current_private_vis = prev_private_vis;
             }
 
             ast::ItemKind::Enum(_, _, EnumDef { ref variants }) => {
-                self.set_bindings_effective_visibilities(def_id);
                 for variant in variants {
                     let variant_def_id = self.r.local_def_id(variant.id);
                     for field in variant.data.fields() {
@@ -246,10 +310,6 @@ impl<'a, 'ra, 'tcx> Visitor<'a> for EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> 
                 }
             }
 
-            ast::ItemKind::Trait(..) => {
-                self.set_bindings_effective_visibilities(def_id);
-            }
-
             ast::ItemKind::ExternCrate(..)
             | ast::ItemKind::Use(..)
             | ast::ItemKind::Static(..)
@@ -257,6 +317,7 @@ impl<'a, 'ra, 'tcx> Visitor<'a> for EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> 
             | ast::ItemKind::ConstBlock(..)
             | ast::ItemKind::GlobalAsm(..)
             | ast::ItemKind::TyAlias(..)
+            | ast::ItemKind::Trait(..)
             | ast::ItemKind::TraitAlias(..)
             | ast::ItemKind::MacroDef(..)
             | ast::ItemKind::ForeignMod(..)
