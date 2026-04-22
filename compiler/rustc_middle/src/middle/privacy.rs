@@ -93,7 +93,7 @@ impl EffectiveVisibility {
 /// Holds a map of effective visibilities for reachable HIR nodes.
 #[derive(Clone, Debug)]
 pub struct EffectiveVisibilities<Id = LocalDefId> {
-    map: FxIndexMap<Id, EffectiveVisibility>,
+    pub map: FxIndexMap<Id, EffectiveVisibility>,
 }
 
 impl EffectiveVisibilities {
