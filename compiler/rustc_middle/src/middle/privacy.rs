@@ -202,6 +202,10 @@ impl<Id: Eq + Hash> EffectiveVisibilities<Id> {
         self.map.get(&id)
     }
 
+    pub fn insert(&mut self, key: Id, value: EffectiveVisibility) -> Option<EffectiveVisibility> {
+        self.map.insert(key, value)
+    }
+
     // FIXME: Share code with `fn update`.
     pub fn effective_vis_or_private(
         &mut self,
