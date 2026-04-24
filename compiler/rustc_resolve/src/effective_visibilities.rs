@@ -31,33 +31,38 @@ impl ParentId<'_> {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug)]
 struct PartialEffectiveVis {
-    direct: Option<Visibility>,
-    reexported: Option<Visibility>,
+    direct: Visibility,
+    reexported: Visibility,
+    is_reexported: bool,
+}
+
+impl Default for PartialEffectiveVis {
+    fn default() -> PartialEffectiveVis {
+        PartialEffectiveVis::from_vis(Visibility::Public)
+    }
 }
 
 impl PartialEffectiveVis {
-    fn to_effective_vis(self /* resolver: &Resolver<'_, '_>, */) -> EffectiveVisibility {
-        match (self.direct, self.reexported) {
-            (Some(direct), Some(reexported)) => {
-                EffectiveVisibility::from_parts(direct, reexported, reexported, reexported)
-            }
-            (Some(direct), None) => EffectiveVisibility::from_vis(direct),
-            _ => unreachable!(),
-        }
+    fn to_effective_vis(self) -> EffectiveVisibility {
+        let reexported = if self.is_reexported { self.reexported } else { self.direct };
+        EffectiveVisibility::from_parts(self.direct, reexported, reexported, reexported)
     }
 
-    fn set_at_level(&mut self, vis: Option<Visibility>, level: Level) {
+    fn set_at_level(&mut self, vis: Visibility, level: Level) {
         match level {
             Level::Direct => self.direct = vis,
-            Level::Reexported => self.reexported = vis,
+            Level::Reexported => {
+                self.reexported = vis;
+                self.is_reexported = true;
+            }
             _ => unreachable!(),
         }
     }
 
     const fn from_vis(vis: Visibility) -> PartialEffectiveVis {
-        PartialEffectiveVis { direct: Some(vis), reexported: Some(vis) }
+        PartialEffectiveVis { direct: vis, reexported: vis, is_reexported: false }
     }
 }
 
@@ -152,12 +157,12 @@ impl<'a, 'ra, 'tcx> EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
         let mut collector = EffectiveVisibilitiesVisitor::new(r);
 
         // Step 0: Initialize heap with crate bindings.
-        // collector.def_effective_visibilities.update_root();
         collector.update_root();
         collector.collect_module_bindings(CRATE_DEF_ID);
 
         // Step 1: iterate over bindings.
         while let Some(UpdateStep { parent_mod, binding, tcx: _ }) = collector.heap.pop() {
+            // TODO: do not visit before parent module
             if collector.visited.contains(&binding) {
                 continue;
             }
@@ -166,8 +171,9 @@ impl<'a, 'ra, 'tcx> EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
             collector.update_binding(parent_mod, binding);
 
             // Step 1.2: put new elements in the heap.
-            if let Res::Def(DefKind::Mod | DefKind::Enum | DefKind::Trait, module_id) =
-                binding.res()
+            if !binding.is_import()
+                && let Res::Def(DefKind::Mod | DefKind::Enum | DefKind::Trait, module_id) =
+                    binding.res()
                 && let Some(module_id) = module_id.as_local()
             {
                 collector.collect_module_bindings(module_id);
@@ -176,10 +182,12 @@ impl<'a, 'ra, 'tcx> EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
             collector.visited.insert(binding);
         }
 
+        visit::walk_crate(&mut collector, krate);
+
         let mut effective_visibilities = EffectiveVisibilities::default();
         for (id, partial_eff_vis) in collector.def_effective_visibilities.iter() {
-            println!("id: {:?}", id);
-            println!("partial_eff_vis: {:?}", partial_eff_vis);
+            // println!("id: {:?}", id);
+            // println!("partial_eff_vis: {:?}", partial_eff_vis);
             effective_visibilities.insert(*id, partial_eff_vis.to_effective_vis());
         }
 
@@ -222,11 +230,13 @@ impl<'a, 'ra, 'tcx> EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
 
     fn collect_module_bindings(&mut self, module_id: LocalDefId) {
         let module = self.r.expect_module(module_id.to_def_id());
+        println!("collect module bindings: {:?}", module.span);
         for (_, name_resolution) in self.r.resolutions(module).borrow().iter() {
             let Some(decl) = name_resolution.borrow().best_decl() else {
                 continue;
             };
 
+            println!("add decl: {:?}, parent: {:?}", decl.span, module_id);
             let state = UpdateStep::new(self.r.tcx, module_id, decl);
             self.heap.push(state);
         }
@@ -237,6 +247,8 @@ impl<'a, 'ra, 'tcx> EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
     }
 
     fn update_binding(&mut self, parent_mod: LocalDefId, mut decl: Decl<'ra>) {
+        println!("update binding: {:?}", decl.span);
+
         let mut parent_id = ParentId::Def(parent_mod);
 
         // Walk through re‑export chains.
@@ -253,13 +265,18 @@ impl<'a, 'ra, 'tcx> EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
     }
 
     fn update_import(&mut self, decl: Decl<'ra>, parent_id: ParentId<'ra>) {
+        // TODO: default in parent. NV restrict based on level
         let nominal_vis = decl.vis().expect_local();
         let inherited_vis = self.inherit_vis_from_parent(nominal_vis, parent_id);
         let entry = self
             .import_effective_visibilities
             .entry(decl)
             .or_insert_with(PartialEffectiveVis::default);
+
+        println!("update_import before: {:?}", entry);
+
         entry.set_at_level(inherited_vis, parent_id.level());
+        println!("update_import after: {:?}", entry);
     }
 
     fn update_def(
@@ -269,24 +286,25 @@ impl<'a, 'ra, 'tcx> EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
         parent_id: ParentId<'ra>,
     ) {
         let inherited_vis = self.inherit_vis_from_parent(nominal_vis, parent_id);
-        let entry = self.def_effective_visibilities.entry(def_id).or_insert_with(|| {
-            PartialEffectiveVis { direct: Some(self.r.private_vis_def(def_id)), reexported: None }
-        });
+        let entry = self
+            .def_effective_visibilities
+            .entry(def_id)
+            .or_insert_with(PartialEffectiveVis::default);
+
+        println!("update_def before: {:?}", entry);
+        println!("update_def inherited_vis: {:?}", inherited_vis);
         entry.set_at_level(inherited_vis, parent_id.level());
+        println!("update_def after: {:?}", entry);
     }
 
-    fn inherit_vis_from_parent(
-        &self,
-        nominal_vis: Visibility,
-        id: ParentId<'ra>,
-    ) -> Option<Visibility> {
+    fn inherit_vis_from_parent(&self, nominal_vis: Visibility, id: ParentId<'ra>) -> Visibility {
         let new_vis = match id {
             ParentId::Def(def_id) => self.def_effective_visibilities.index(&def_id).direct,
             ParentId::Import(binding) => {
                 self.import_effective_visibilities.index(&binding).reexported
             }
         };
-        new_vis.map(|vis| vis.min(nominal_vis, self.r.tcx))
+        new_vis.min(nominal_vis, self.r.tcx)
     }
 }
 
@@ -294,7 +312,6 @@ impl<'a, 'ra, 'tcx> Visitor<'a> for EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> 
     fn visit_item(&mut self, item: &'a ast::Item) {
         let def_id = self.r.local_def_id(item.id);
         // Update effective visibilities of adt fields.
-        // If it's a mod, also make the visitor walk all of its items
         match item.kind {
             ast::ItemKind::Mod(..) => {
                 visit::walk_item(self, item);

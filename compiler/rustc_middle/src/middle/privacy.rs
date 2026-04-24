@@ -64,7 +64,7 @@ impl EffectiveVisibility {
         }
     }
 
-    pub fn at_level_mut(&mut self, level: Level) -> &mut Visibility {
+    fn at_level_mut(&mut self, level: Level) -> &mut Visibility {
         match level {
             Level::Direct => &mut self.direct,
             Level::Reexported => &mut self.reexported,
