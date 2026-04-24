@@ -1,12 +1,13 @@
 #![allow(unused)]
-
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::mem;
+use std::ops::{Index, IndexMut};
 
+use indexmap::map::Entry;
 use rustc_ast::visit::Visitor;
 use rustc_ast::{Crate, EnumDef, ast, visit};
-use rustc_data_structures::fx::FxHashSet;
+use rustc_data_structures::fx::{FxHashMap, FxHashSet, FxIndexMap, FxIndexSet};
 use rustc_hir::def::DefKind;
 use rustc_hir::def_id::{CRATE_DEF_ID, DefId, LocalDefId};
 use rustc_middle::middle::privacy::{EffectiveVisibilities, EffectiveVisibility, Level};
@@ -30,29 +31,32 @@ impl ParentId<'_> {
     }
 }
 
-impl Resolver<'_, '_> {
-    fn nearest_normal_mod(&self, def_id: LocalDefId) -> LocalDefId {
-        self.get_nearest_non_block_module(def_id.to_def_id()).nearest_parent_mod().expect_local()
-    }
+#[derive(Default, Clone, Copy)]
+struct PartialEffectiveVis {
+    direct: Option<Visibility>,
+    reexported: Option<Visibility>,
+}
 
-    fn private_vis_import(&self, decl: Decl<'_>) -> Visibility {
-        let DeclKind::Import { import, .. } = decl.kind else { unreachable!() };
-        Visibility::Restricted(
-            import
-                .id()
-                .map(|id| self.nearest_normal_mod(self.local_def_id(id)))
-                .unwrap_or(CRATE_DEF_ID),
-        )
-    }
-
-    fn private_vis_def(&self, def_id: LocalDefId) -> Visibility {
-        // For mod items `nearest_normal_mod` returns its argument, but we actually need its parent.
-        let normal_mod_id = self.nearest_normal_mod(def_id);
-        if normal_mod_id == def_id {
-            Visibility::Restricted(self.tcx.local_parent(def_id))
-        } else {
-            Visibility::Restricted(normal_mod_id)
+impl PartialEffectiveVis {
+    fn to_effective_vis(self) -> EffectiveVisibility {
+        match (self.direct, self.reexported) {
+            (Some(direct), Some(reexported)) => {
+                todo!()
+            }
+            (Some(direct), None) => {
+                todo!()
+            }
+            (None, Some(reexported)) => {
+                todo!()
+            }
+            (None, None) => {
+                todo!()
+            }
         }
+    }
+
+    pub const fn from_vis(vis: Visibility) -> PartialEffectiveVis {
+        PartialEffectiveVis { direct: Some(vis), reexported: Some(vis) }
     }
 }
 
@@ -100,14 +104,40 @@ impl<'ra, 'tcx> UpdateStep<'ra, 'tcx> {
 
 pub(crate) struct EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
     r: &'a mut Resolver<'ra, 'tcx>,
-    def_effective_visibilities: EffectiveVisibilities,
+    def_effective_visibilities: FxIndexMap<LocalDefId, PartialEffectiveVis>,
     /// While walking import chains we need to track effective visibilities per-decl, and def id
     /// keys in `Resolver::effective_visibilities` are not enough for that, because multiple
     /// declarations can correspond to a single def id in imports. So we keep a separate table.
-    import_effective_visibilities: EffectiveVisibilities<Decl<'ra>>,
+    import_effective_visibilities: FxIndexMap<Decl<'ra>, PartialEffectiveVis>,
     /// Priority queue for bindings.
     heap: BinaryHeap<UpdateStep<'ra, 'tcx>>,
     visited: FxHashSet<Decl<'ra>>,
+}
+
+impl Resolver<'_, '_> {
+    fn nearest_normal_mod(&self, def_id: LocalDefId) -> LocalDefId {
+        self.get_nearest_non_block_module(def_id.to_def_id()).nearest_parent_mod().expect_local()
+    }
+
+    fn private_vis_import(&self, decl: Decl<'_>) -> Visibility {
+        let DeclKind::Import { import, .. } = decl.kind else { unreachable!() };
+        Visibility::Restricted(
+            import
+                .id()
+                .map(|id| self.nearest_normal_mod(self.local_def_id(id)))
+                .unwrap_or(CRATE_DEF_ID),
+        )
+    }
+
+    fn private_vis_def(&self, def_id: LocalDefId) -> Visibility {
+        // For mod items `nearest_normal_mod` returns its argument, but we actually need its parent.
+        let normal_mod_id = self.nearest_normal_mod(def_id);
+        if normal_mod_id == def_id {
+            Visibility::Restricted(self.tcx.local_parent(def_id))
+        } else {
+            Visibility::Restricted(normal_mod_id)
+        }
+    }
 }
 
 impl<'a, 'ra, 'tcx> EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
@@ -121,6 +151,9 @@ impl<'a, 'ra, 'tcx> EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
         }
     }
 
+    /// Fills the `Resolver::effective_visibilities` table with public & exported items
+    /// For now, this doesn't resolve macros (FIXME) and cannot resolve Impl, as we
+    /// need access to a `TyCtxt` for that. Returns the set of ambiguous re-exports.
     pub(crate) fn compute_effective_visibilities<'c>(
         r: &'a mut Resolver<'ra, 'tcx>,
         krate: &'c Crate,
@@ -128,7 +161,8 @@ impl<'a, 'ra, 'tcx> EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
         let mut collector = EffectiveVisibilitiesVisitor::new(r);
 
         // Step 0: Initialize heap with crate bindings.
-        collector.def_effective_visibilities.update_root();
+        // collector.def_effective_visibilities.update_root();
+        collector.update_root();
         collector.collect_module_bindings(CRATE_DEF_ID);
 
         // Step 1: iterate over bindings.
@@ -138,8 +172,6 @@ impl<'a, 'ra, 'tcx> EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
             }
 
             // Step 1.1: update effective visibility of the binding.
-            // TODO: we need to check for update and insert back to queue with lower cost? Cost in that case
-            // have to contain effective vis also?
             collector.update_binding_effective_visibility(parent_mod, binding);
 
             // Step 1.2: put new elements in the heap.
@@ -153,15 +185,14 @@ impl<'a, 'ra, 'tcx> EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
             collector.visited.insert(binding);
         }
 
-        // Step 2: Update effective visibilities for adt's fields. TODO: because we can't check
-        // them during modules traverse.
-        visit::walk_crate(&mut collector, krate);
-
-        collector.r.effective_visibilities = collector.def_effective_visibilities;
+        let effective_visibilities = EffectiveVisibilities::default();
+        for (decl, partial_eff_vis) in collector.def_effective_visibilities.iter() {
+            // effective_visibilities
+        }
 
         let mut exported_ambiguities = FxHashSet::default();
 
-        // Step 3: Update visibilities for import def ids. These are not used during the
+        // Step 2: Update visibilities for import def ids. These are not used during the
         // `EffectiveVisibilitiesVisitor` pass, because we have more detailed declaration-based
         // information, but are used by later passes. Effective visibility of an import def id
         // is the maximum value among visibilities of declarations corresponding to that def id.
@@ -175,9 +206,18 @@ impl<'a, 'ra, 'tcx> EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
             }
         }
 
+        // Step 3: Update effective visibilities for adt's fields. TODO: because we can't check
+        // them during modules traverse.
+        visit::walk_crate(&mut collector, krate);
+
         info!("resolve::effective_visibilities: {:#?}", r.effective_visibilities);
 
         exported_ambiguities
+    }
+
+    pub fn update_root(&mut self) {
+        self.def_effective_visibilities
+            .insert(CRATE_DEF_ID, PartialEffectiveVis::from_vis(Visibility::Public));
     }
 
     fn collect_module_bindings(&mut self, module_id: LocalDefId) {
@@ -211,16 +251,11 @@ impl<'a, 'ra, 'tcx> EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
 
     fn update_import(&mut self, decl: Decl<'ra>, parent_id: ParentId<'ra>) {
         let nominal_vis = decl.vis().expect_local();
-        let inherited_eff_vis = self.effective_vis_or_private(parent_id);
-        let tcx = self.r.tcx;
-        let changed = self.import_effective_visibilities.update(
-            decl,
-            Some(nominal_vis),
-            || self.r.private_vis_import(decl),
-            inherited_eff_vis,
-            parent_id.level(),
-            tcx,
-        );
+        let entry = self
+            .import_effective_visibilities
+            .entry(decl)
+            .or_insert_with(PartialEffectiveVis::default);
+        self.update(entry, nominal_vis, parent_id);
     }
 
     fn update_def(
@@ -229,29 +264,29 @@ impl<'a, 'ra, 'tcx> EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
         nominal_vis: Visibility,
         parent_id: ParentId<'ra>,
     ) {
-        let inherited_eff_vis = self.effective_vis_or_private(parent_id);
-        let tcx = self.r.tcx;
-        let changed = self.def_effective_visibilities.update(
-            def_id,
-            Some(nominal_vis),
-            || self.r.private_vis_def(def_id),
-            inherited_eff_vis,
-            parent_id.level(),
-            tcx,
-        );
+        let entry = self
+            .def_effective_visibilities
+            .entry(def_id)
+            .or_insert_with(PartialEffectiveVis::default);
+        self.update(entry, nominal_vis, parent_id);
     }
 
-    fn effective_vis_or_private(&mut self, parent_id: ParentId<'ra>) -> EffectiveVisibility {
-        // Private nodes are only added to the table for caching, they could be added or removed at
-        // any moment without consequences, so we don't set `changed` to true when adding them.
-        *match parent_id {
-            ParentId::Def(def_id) => self
-                .def_effective_visibilities
-                .effective_vis_or_private(def_id, || self.r.private_vis_def(def_id)),
-            ParentId::Import(binding) => self
-                .import_effective_visibilities
-                .effective_vis_or_private(binding, || self.r.private_vis_import(binding)),
-        }
+    fn update(
+        &mut self,
+        val: &mut PartialEffectiveVis,
+        nominal_vis: Visibility,
+        id: ParentId<'ra>,
+    ) {
+        match id {
+            ParentId::Def(def_id) => {
+                let new_vis = self.def_effective_visibilities.index(&def_id).direct;
+                val.direct = new_vis.map(|vis| vis.min(nominal_vis, self.r.tcx));
+            }
+            ParentId::Import(binding) => {
+                let new_vis = self.import_effective_visibilities.index(&binding).reexported;
+                val.reexported = new_vis.map(|vis| vis.min(nominal_vis, self.r.tcx));
+            }
+        };
     }
 }
 

@@ -8,7 +8,7 @@ use rustc_data_structures::fx::{FxIndexMap, IndexEntry};
 use rustc_data_structures::stable_hasher::{HashStable, StableHasher};
 use rustc_hir::def::DefKind;
 use rustc_macros::HashStable;
-use rustc_span::def_id::{CRATE_DEF_ID, LocalDefId};
+use rustc_span::def_id::LocalDefId;
 
 use crate::ich::StableHashingContext;
 use crate::ty::{TyCtxt, Visibility};
@@ -93,7 +93,7 @@ impl EffectiveVisibility {
 /// Holds a map of effective visibilities for reachable HIR nodes.
 #[derive(Clone, Debug)]
 pub struct EffectiveVisibilities<Id = LocalDefId> {
-    pub map: FxIndexMap<Id, EffectiveVisibility>,
+    map: FxIndexMap<Id, EffectiveVisibility>,
 }
 
 impl EffectiveVisibilities {
@@ -120,10 +120,6 @@ impl EffectiveVisibilities {
         self.effective_vis(id).and_then(|effective_vis| {
             Level::all_levels().into_iter().find(|&level| effective_vis.is_public_at_level(level))
         })
-    }
-
-    pub fn update_root(&mut self) {
-        self.map.insert(CRATE_DEF_ID, EffectiveVisibility::from_vis(Visibility::Public));
     }
 
     // FIXME: Share code with `fn update`.
