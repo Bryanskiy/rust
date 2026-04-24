@@ -31,27 +31,20 @@ impl ParentId<'_> {
     }
 }
 
-#[derive(Default, Clone, Copy)]
+#[derive(Clone, Copy, Debug, Default)]
 struct PartialEffectiveVis {
     direct: Option<Visibility>,
     reexported: Option<Visibility>,
 }
 
 impl PartialEffectiveVis {
-    fn to_effective_vis(self) -> EffectiveVisibility {
+    fn to_effective_vis(self /* resolver: &Resolver<'_, '_>, */) -> EffectiveVisibility {
         match (self.direct, self.reexported) {
             (Some(direct), Some(reexported)) => {
-                todo!()
+                EffectiveVisibility::from_parts(direct, reexported, reexported, reexported)
             }
-            (Some(direct), None) => {
-                todo!()
-            }
-            (None, Some(reexported)) => {
-                todo!()
-            }
-            (None, None) => {
-                todo!()
-            }
+            (Some(direct), None) => EffectiveVisibility::from_vis(direct),
+            _ => unreachable!(),
         }
     }
 
@@ -127,16 +120,6 @@ impl Resolver<'_, '_> {
         self.get_nearest_non_block_module(def_id.to_def_id()).nearest_parent_mod().expect_local()
     }
 
-    fn private_vis_import(&self, decl: Decl<'_>) -> Visibility {
-        let DeclKind::Import { import, .. } = decl.kind else { unreachable!() };
-        Visibility::Restricted(
-            import
-                .id()
-                .map(|id| self.nearest_normal_mod(self.local_def_id(id)))
-                .unwrap_or(CRATE_DEF_ID),
-        )
-    }
-
     fn private_vis_def(&self, def_id: LocalDefId) -> Visibility {
         // For mod items `nearest_normal_mod` returns its argument, but we actually need its parent.
         let normal_mod_id = self.nearest_normal_mod(def_id);
@@ -195,6 +178,8 @@ impl<'a, 'ra, 'tcx> EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
 
         let mut effective_visibilities = EffectiveVisibilities::default();
         for (id, partial_eff_vis) in collector.def_effective_visibilities.iter() {
+            println!("id: {:?}", id);
+            println!("partial_eff_vis: {:?}", partial_eff_vis);
             effective_visibilities.insert(*id, partial_eff_vis.to_effective_vis());
         }
 
@@ -284,10 +269,9 @@ impl<'a, 'ra, 'tcx> EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
         parent_id: ParentId<'ra>,
     ) {
         let inherited_vis = self.inherit_vis_from_parent(nominal_vis, parent_id);
-        let entry = self
-            .def_effective_visibilities
-            .entry(def_id)
-            .or_insert_with(PartialEffectiveVis::default);
+        let entry = self.def_effective_visibilities.entry(def_id).or_insert_with(|| {
+            PartialEffectiveVis { direct: Some(self.r.private_vis_def(def_id)), reexported: None }
+        });
         entry.set_at_level(inherited_vis, parent_id.level());
     }
 

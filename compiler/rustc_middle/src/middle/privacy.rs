@@ -46,6 +46,15 @@ pub struct EffectiveVisibility {
 }
 
 impl EffectiveVisibility {
+    pub fn from_parts(
+        direct: Visibility,
+        reexported: Visibility,
+        reachable: Visibility,
+        reachable_through_impl_trait: Visibility,
+    ) -> EffectiveVisibility {
+        EffectiveVisibility { direct, reexported, reachable, reachable_through_impl_trait }
+    }
+
     pub fn at_level(&self, level: Level) -> &Visibility {
         match level {
             Level::Direct => &self.direct,
@@ -55,7 +64,7 @@ impl EffectiveVisibility {
         }
     }
 
-    fn at_level_mut(&mut self, level: Level) -> &mut Visibility {
+    pub fn at_level_mut(&mut self, level: Level) -> &mut Visibility {
         match level {
             Level::Direct => &mut self.direct,
             Level::Reexported => &mut self.reexported,
