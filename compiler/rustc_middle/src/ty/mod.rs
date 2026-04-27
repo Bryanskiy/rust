@@ -392,6 +392,10 @@ impl<Id: Into<DefId> + Copy> Visibility<Id> {
     pub fn min(self, vis: Visibility<Id>, tcx: TyCtxt<'_>) -> Visibility<Id> {
         if self.is_at_least(vis, tcx) { vis } else { self }
     }
+
+    pub fn max(self, vis: Visibility<Id>, tcx: TyCtxt<'_>) -> Visibility<Id> {
+        if self.is_at_least(vis, tcx) { self } else { vis }
+    }
 }
 
 impl Visibility<DefId> {

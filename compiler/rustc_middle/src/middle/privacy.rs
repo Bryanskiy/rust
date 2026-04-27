@@ -8,7 +8,7 @@ use rustc_data_structures::fx::{FxIndexMap, IndexEntry};
 use rustc_data_structures::stable_hasher::{HashStable, StableHasher};
 use rustc_hir::def::DefKind;
 use rustc_macros::HashStable;
-use rustc_span::def_id::{CRATE_DEF_ID, LocalDefId};
+use rustc_span::def_id::LocalDefId;
 
 use crate::ich::StableHashingContext;
 use crate::ty::{TyCtxt, Visibility};
@@ -46,6 +46,15 @@ pub struct EffectiveVisibility {
 }
 
 impl EffectiveVisibility {
+    pub fn from_parts(
+        direct: Visibility,
+        reexported: Visibility,
+        reachable: Visibility,
+        reachable_through_impl_trait: Visibility,
+    ) -> EffectiveVisibility {
+        EffectiveVisibility { direct, reexported, reachable, reachable_through_impl_trait }
+    }
+
     pub fn at_level(&self, level: Level) -> &Visibility {
         match level {
             Level::Direct => &self.direct,
@@ -120,10 +129,6 @@ impl EffectiveVisibilities {
         self.effective_vis(id).and_then(|effective_vis| {
             Level::all_levels().into_iter().find(|&level| effective_vis.is_public_at_level(level))
         })
-    }
-
-    pub fn update_root(&mut self) {
-        self.map.insert(CRATE_DEF_ID, EffectiveVisibility::from_vis(Visibility::Public));
     }
 
     // FIXME: Share code with `fn update`.
@@ -213,6 +218,10 @@ impl<Id: Eq + Hash> EffectiveVisibilities<Id> {
         lazy_private_vis: impl FnOnce() -> Visibility,
     ) -> &EffectiveVisibility {
         self.map.entry(id).or_insert_with(|| EffectiveVisibility::from_vis(lazy_private_vis()))
+    }
+
+    pub fn insert(&mut self, key: Id, value: EffectiveVisibility) -> Option<EffectiveVisibility> {
+        self.map.insert(key, value)
     }
 
     pub fn update(
