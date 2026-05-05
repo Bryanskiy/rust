@@ -284,7 +284,15 @@ impl<'a, 'ra, 'tcx> UseChainVisitor<'a, 'ra, 'tcx> {
         }
     }
 
-    fn _append_binding(&mut self) {}
+    fn try_append_binding(&mut self, binding: Decl<'ra>) {
+        if (binding.is_import() || matches!(binding.res(), Res::Def(DefKind::Mod, _)))
+            && let Some(parent_mod) = binding.parent_module
+            && let Some(parent_mod) = parent_mod.opt_def_id()
+            && let Some(parent_mod) = parent_mod.as_local()
+        {
+            self.queue.push(UpdateStep::new(parent_mod, binding));
+        }
+    }
 
     /// Update effective visibility of a name declaration in the given module,
     /// including its whole reexport chain.
@@ -297,15 +305,8 @@ impl<'a, 'ra, 'tcx> UseChainVisitor<'a, 'ra, 'tcx> {
         }
 
         if let Some(def_id) = decl.res().opt_def_id().and_then(|id| id.as_local()) {
-            if self.update_def(def_id, decl.vis().expect_local(), parent_id)
-                && let Some(parent_mod) = decl.parent_module
-                && let Some(parent_mod) = parent_mod.opt_def_id()
-                && let Some(parent_mod) = parent_mod.as_local()
-            {
-                println!("decl: {:?}", decl.span);
-                println!("parent_mod: {:?}", parent_mod);
-                println!("decl res: {:?}", decl.res());
-                self.queue.push(UpdateStep::new(parent_mod, decl));
+            if self.update_def(def_id, decl.vis().expect_local(), parent_id) {
+                self.try_append_binding(decl);
             }
         }
     }
@@ -316,9 +317,7 @@ impl<'a, 'ra, 'tcx> UseChainVisitor<'a, 'ra, 'tcx> {
             let Some(decl) = name_resolution.borrow().best_decl() else {
                 continue;
             };
-            if decl.is_import() || matches!(decl.res(), Res::Def(DefKind::Mod, _)) {
-                self.queue.push(UpdateStep::new(module_id, decl));
-            }
+            self.try_append_binding(decl);
         }
     }
 }
