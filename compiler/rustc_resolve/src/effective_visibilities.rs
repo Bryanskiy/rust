@@ -89,7 +89,7 @@ impl<'a, 'ra, 'tcx> Id<'a, 'ra, 'tcx> for LocalDefId {
     }
 }
 
-trait EffectiveVisCollector<'a, 'ra: 'a, 'tcx: 'a>: Visitor<'a> {
+trait EffectiveVisCollector<'a, 'ra: 'a, 'tcx: 'a> {
     type ParentId: Copy + Id<'a, 'ra, 'tcx>;
 
     fn base(&mut self) -> &mut EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx>;
@@ -158,8 +158,6 @@ trait EffectiveVisCollector<'a, 'ra: 'a, 'tcx: 'a>: Visitor<'a> {
         changed
     }
 
-    fn update_bindings(&mut self, module_id: LocalDefId);
-
     fn effective_vis_or_private(&mut self, parent_id: Self::ParentId) -> EffectiveVisibility {
         Id::effective_vis_or_private(parent_id, self.base())
     }
@@ -219,13 +217,9 @@ impl<'a, 'ra, 'tcx> EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
 
         visitor.def_effective_visibilities.update_root();
 
-        let mut chain_visitor = UseChainVisitor { visitor, changed: true };
-        chain_visitor.update_bindings(CRATE_DEF_ID);
+        let mut chain_visitor = UseChainVisitor { visitor, queue: vec![] };
+        chain_visitor.compute_effective_visibilities();
 
-        while chain_visitor.changed {
-            chain_visitor.changed = false;
-            visit::walk_crate(&mut chain_visitor, krate);
-        }
         let mut def_visitor = DefsVisitor { visitor: chain_visitor.visitor };
         def_visitor.update_bindings(CRATE_DEF_ID);
         visit::walk_crate(&mut def_visitor, krate);
@@ -255,9 +249,76 @@ impl<'a, 'ra, 'tcx> EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
     }
 }
 
+#[derive(Copy, Clone)]
+struct UpdateStep<'ra> {
+    parent_mod: LocalDefId,
+    binding: Decl<'ra>,
+}
+
+impl<'ra> UpdateStep<'ra> {
+    fn new(parent_mod: LocalDefId, binding: Decl<'ra>) -> UpdateStep<'ra> {
+        UpdateStep { parent_mod, binding }
+    }
+}
+
 struct UseChainVisitor<'a, 'ra, 'tcx> {
     visitor: EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx>,
-    changed: bool,
+    queue: Vec<UpdateStep<'ra>>,
+}
+
+impl<'a, 'ra, 'tcx> UseChainVisitor<'a, 'ra, 'tcx> {
+    fn compute_effective_visibilities(&mut self) {
+        self.collect_module_bindings(CRATE_DEF_ID);
+
+        while let Some(UpdateStep { binding, parent_mod }) = self.queue.pop() {
+            self.visitor.current_private_vis = Visibility::Restricted(parent_mod);
+            self.update_binding_effective_visibility(parent_mod, binding);
+
+            if !binding.is_import()
+                && let Res::Def(DefKind::Mod, module_id) = binding.res()
+                && let Some(module_id) = module_id.as_local()
+            {
+                self.collect_module_bindings(module_id);
+            }
+        }
+    }
+
+    fn try_append_binding(&mut self, binding: Decl<'ra>) {
+        if (binding.is_import() || matches!(binding.res(), Res::Def(DefKind::Mod, _)))
+            && let Some(parent_mod) = binding.parent_module
+            && let Some(parent_mod) = parent_mod.opt_def_id()
+            && let Some(parent_mod) = parent_mod.as_local()
+        {
+            self.queue.push(UpdateStep::new(parent_mod, binding));
+        }
+    }
+
+    /// Update effective visibility of a name declaration in the given module,
+    /// including its whole reexport chain.
+    fn update_binding_effective_visibility(&mut self, parent_mod: LocalDefId, mut decl: Decl<'ra>) {
+        let mut parent_id = UseChainId::Def(parent_mod);
+        while let DeclKind::Import { source_decl, import: _ } = decl.kind {
+            let _ = self.update_import(decl, parent_id);
+            parent_id = UseChainId::Import(decl);
+            decl = source_decl;
+        }
+
+        if let Some(def_id) = decl.res().opt_def_id().and_then(|id| id.as_local()) {
+            if self.update_def(def_id, decl.vis().expect_local(), parent_id) {
+                self.try_append_binding(decl);
+            }
+        }
+    }
+
+    fn collect_module_bindings(&mut self, module_id: LocalDefId) {
+        let module = self.visitor.r.expect_module(module_id.to_def_id());
+        for (_, name_resolution) in self.visitor.r.resolutions(module).borrow().iter() {
+            let Some(decl) = name_resolution.borrow().best_decl() else {
+                continue;
+            };
+            self.try_append_binding(decl);
+        }
+    }
 }
 
 impl<'a, 'ra, 'tcx> EffectiveVisCollector<'a, 'ra, 'tcx> for UseChainVisitor<'a, 'ra, 'tcx> {
@@ -266,46 +327,26 @@ impl<'a, 'ra, 'tcx> EffectiveVisCollector<'a, 'ra, 'tcx> for UseChainVisitor<'a,
     fn base(&mut self) -> &mut EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
         &mut self.visitor
     }
-
-    fn update_bindings(&mut self, module_id: LocalDefId) {
-        let module = self.base().r.expect_module(module_id.to_def_id());
-        for (_, name_resolution) in self.base().r.resolutions(module).borrow().iter() {
-            let Some(mut decl) = name_resolution.borrow().best_decl() else {
-                continue;
-            };
-            if decl.is_import() || matches!(decl.res(), Res::Def(DefKind::Mod, _)) {
-                // Set the given effective visibility level to `Level::Direct` and
-                // sets the rest of the `use` chain to `Level::Reexported` until
-                // we hit the actual exported item.
-                let mut parent_id = UseChainId::Def(module_id);
-                while let DeclKind::Import { source_decl, .. } = decl.kind {
-                    self.changed |= self.update_import(decl, parent_id);
-                    parent_id = UseChainId::Import(decl);
-                    decl = source_decl;
-                }
-                if let Some(def_id) = decl.res().opt_def_id().and_then(|id| id.as_local()) {
-                    self.changed |= self.update_def(def_id, decl.vis().expect_local(), parent_id);
-                }
-            }
-        }
-    }
-}
-
-impl<'a, 'ra, 'tcx> Visitor<'a> for UseChainVisitor<'a, 'ra, 'tcx> {
-    fn visit_item(&mut self, item: &'a ast::Item) {
-        let def_id = self.base().r.local_def_id(item.id);
-        if let ast::ItemKind::Mod(..) = item.kind {
-            let prev_private_vis =
-                mem::replace(&mut self.base().current_private_vis, Visibility::Restricted(def_id));
-            self.update_bindings(def_id);
-            visit::walk_item(self, item);
-            self.base().current_private_vis = prev_private_vis;
-        }
-    }
 }
 
 struct DefsVisitor<'a, 'ra, 'tcx> {
     visitor: EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx>,
+}
+
+impl<'a, 'ra, 'tcx> DefsVisitor<'a, 'ra, 'tcx> {
+    fn update_bindings(&mut self, module_id: LocalDefId) {
+        let module = self.base().r.expect_module(module_id.to_def_id());
+        for (_, name_resolution) in self.base().r.resolutions(module).borrow().iter() {
+            let Some(decl) = name_resolution.borrow().best_decl() else {
+                continue;
+            };
+            if !decl.is_import()
+                && let Some(def_id) = decl.res().opt_def_id().and_then(|id| id.as_local())
+            {
+                _ = self.update_def(def_id, decl.vis().expect_local(), module_id);
+            }
+        }
+    }
 }
 
 impl<'a, 'ra, 'tcx> DefsVisitor<'a, 'ra, 'tcx> {
@@ -320,20 +361,6 @@ impl<'a, 'ra, 'tcx> EffectiveVisCollector<'a, 'ra, 'tcx> for DefsVisitor<'a, 'ra
 
     fn base(&mut self) -> &mut EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
         &mut self.visitor
-    }
-
-    fn update_bindings(&mut self, module_id: LocalDefId) {
-        let module = self.base().r.expect_module(module_id.to_def_id());
-        for (_, name_resolution) in self.base().r.resolutions(module).borrow().iter() {
-            let Some(decl) = name_resolution.borrow().best_decl() else {
-                continue;
-            };
-            if !decl.is_import()
-                && let Some(def_id) = decl.res().opt_def_id().and_then(|id| id.as_local())
-            {
-                _ = self.update_def(def_id, decl.vis().expect_local(), module_id);
-            }
-        }
     }
 
     fn update_import(&mut self, _decl: Decl<'ra>, _parent_id: Self::ParentId) -> bool {
