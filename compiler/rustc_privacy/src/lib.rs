@@ -16,14 +16,14 @@ use errors::{
     UnnamedItemIsPrivate,
 };
 use rustc_ast::visit::{VisitorResult, try_visit};
-use rustc_data_structures::fx::FxHashSet;
+use rustc_data_structures::fx::{FxHashMap, FxHashSet};
+use rustc_data_structures::indexmap::IndexSet;
 use rustc_data_structures::intern::Interned;
 use rustc_errors::{MultiSpan, listify};
-use rustc_hir as hir;
-use rustc_hir::def::{DefKind, Res};
+use rustc_hir::def::{CtorOf, DefKind, Res};
 use rustc_hir::def_id::{DefId, LocalDefId, LocalModDefId};
 use rustc_hir::intravisit::{self, InferKind, Visitor};
-use rustc_hir::{AmbigArg, ForeignItemId, ItemId, OwnerId, PatKind, find_attr};
+use rustc_hir::{self as hir, AmbigArg, ForeignItemId, ItemId, OwnerId, PatKind, find_attr};
 use rustc_middle::middle::privacy::{EffectiveVisibilities, EffectiveVisibility, Level};
 use rustc_middle::query::Providers;
 use rustc_middle::ty::print::PrintTraitRefExt as _;
@@ -343,6 +343,8 @@ struct FindMin<'a, 'tcx, VL: VisibilityLike, const SHALLOW: bool> {
     tcx: TyCtxt<'tcx>,
     effective_visibilities: &'a EffectiveVisibilities,
     min: VL,
+    type_to_impls: &'a mut FxHashMap<LocalDefId, FxHashSet<LocalDefId>>,
+    impl_def_id: LocalDefId,
 }
 
 impl<'a, 'tcx, VL: VisibilityLike, const SHALLOW: bool> DefIdVisitor<'tcx>
@@ -357,6 +359,9 @@ impl<'a, 'tcx, VL: VisibilityLike, const SHALLOW: bool> DefIdVisitor<'tcx>
     }
     fn visit_def_id(&mut self, def_id: DefId, _kind: &str, _descr: &dyn fmt::Display) {
         if let Some(def_id) = def_id.as_local() {
+            if Self::SHALLOW {
+                self.type_to_impls.entry(def_id).or_default().insert(self.impl_def_id);
+            }
             self.min = VL::new_min(self, def_id);
         }
     }
@@ -376,8 +381,15 @@ trait VisibilityLike: Sized {
         of_trait: bool,
         tcx: TyCtxt<'_>,
         effective_visibilities: &EffectiveVisibilities,
+        type_to_impls: &mut FxHashMap<LocalDefId, FxHashSet<LocalDefId>>,
     ) -> Self {
-        let mut find = FindMin::<_, SHALLOW> { tcx, effective_visibilities, min: Self::MAX };
+        let mut find = FindMin::<_, SHALLOW> {
+            tcx,
+            effective_visibilities,
+            min: Self::MAX,
+            type_to_impls,
+            impl_def_id: def_id,
+        };
         find.visit(tcx.type_of(def_id).instantiate_identity().skip_norm_wip());
         if of_trait {
             find.visit_trait(tcx.impl_trait_ref(def_id).instantiate_identity().skip_norm_wip());
@@ -419,8 +431,10 @@ struct EmbargoVisitor<'tcx> {
     tcx: TyCtxt<'tcx>,
     /// Effective visibilities for reachable nodes.
     effective_visibilities: EffectiveVisibilities,
-    /// Has something changed in the level map?
-    changed: bool,
+    /// Queue with modified items.
+    queue: IndexSet<LocalDefId>,
+    /// Correspondence between type and impls containing this type.
+    type_to_impls: FxHashMap<LocalDefId, FxHashSet<LocalDefId>>,
 }
 
 struct ReachEverythingInTheInterfaceVisitor<'a, 'tcx> {
@@ -452,12 +466,12 @@ impl<'tcx> EmbargoVisitor<'tcx> {
         inherited_effective_vis: EffectiveVisibility,
         max_vis: Option<ty::Visibility>,
         level: Level,
-    ) {
+    ) -> bool {
         // FIXME(typed_def_id): Make `Visibility::Restricted` use a `LocalModDefId` by default.
         let private_vis =
             ty::Visibility::Restricted(self.tcx.parent_module_from_def_id(def_id).into());
         if max_vis != Some(private_vis) {
-            self.changed |= self.effective_visibilities.update(
+            return self.effective_visibilities.update(
                 def_id,
                 max_vis,
                 private_vis,
@@ -466,6 +480,7 @@ impl<'tcx> EmbargoVisitor<'tcx> {
                 self.tcx,
             );
         }
+        false
     }
 
     fn reach(
@@ -509,11 +524,12 @@ impl<'tcx> EmbargoVisitor<'tcx> {
         }
     }
 
-    fn check_def_id(&mut self, owner_id: OwnerId) {
+    fn check_def_id(&mut self, def_id: LocalDefId) {
         // Update levels of nested things and mark all items
         // in interfaces of reachable items as reachable.
-        let item_ev = self.get(owner_id.def_id);
-        match self.tcx.def_kind(owner_id) {
+        let item_ev = self.get(def_id);
+        let def_kind = self.tcx.def_kind(def_id);
+        match def_kind {
             // The interface is empty, and no nested items.
             DefKind::Use | DefKind::ExternCrate | DefKind::GlobalAsm => {}
             // The interface is empty, and all nested items are processed by `check_def_id`.
@@ -526,14 +542,14 @@ impl<'tcx> EmbargoVisitor<'tcx> {
             | DefKind::Fn
             | DefKind::TyAlias => {
                 if let Some(item_ev) = item_ev {
-                    self.reach(owner_id.def_id, item_ev).generics().predicates().ty();
+                    self.reach(def_id, item_ev).generics().predicates().ty();
                 }
             }
             DefKind::Trait => {
                 if let Some(item_ev) = item_ev {
-                    self.reach(owner_id.def_id, item_ev).generics().predicates();
+                    self.reach(def_id, item_ev).generics().predicates();
 
-                    for assoc_item in self.tcx.associated_items(owner_id).in_definition_order() {
+                    for assoc_item in self.tcx.associated_items(def_id).in_definition_order() {
                         let def_id = assoc_item.def_id.expect_local();
                         self.update(def_id, item_ev, Level::Reachable);
 
@@ -543,7 +559,7 @@ impl<'tcx> EmbargoVisitor<'tcx> {
             }
             DefKind::TraitAlias => {
                 if let Some(item_ev) = item_ev {
-                    self.reach(owner_id.def_id, item_ev).generics().predicates();
+                    self.reach(def_id, item_ev).generics().predicates();
                 }
             }
             DefKind::Impl { of_trait } => {
@@ -558,23 +574,24 @@ impl<'tcx> EmbargoVisitor<'tcx> {
                 // without knowing both "shallow" version of its self type and "shallow" version of
                 // its trait if it exists (which require reaching the `DefId`s in them).
                 let item_ev = EffectiveVisibility::of_impl::<true>(
-                    owner_id.def_id,
+                    def_id,
                     of_trait,
                     self.tcx,
                     &self.effective_visibilities,
+                    &mut self.type_to_impls,
                 );
 
-                self.update_eff_vis(owner_id.def_id, item_ev, None, Level::Direct);
+                self.update_eff_vis(def_id, item_ev, None, Level::Direct);
 
                 {
-                    let mut reach = self.reach(owner_id.def_id, item_ev);
+                    let mut reach = self.reach(def_id, item_ev);
                     reach.generics().predicates().ty();
                     if of_trait {
                         reach.trait_ref();
                     }
                 }
 
-                for assoc_item in self.tcx.associated_items(owner_id).in_definition_order() {
+                for assoc_item in self.tcx.associated_items(def_id).in_definition_order() {
                     let def_id = assoc_item.def_id.expect_local();
                     let max_vis =
                         if of_trait { None } else { Some(self.tcx.local_visibility(def_id)) };
@@ -587,9 +604,9 @@ impl<'tcx> EmbargoVisitor<'tcx> {
             }
             DefKind::Enum => {
                 if let Some(item_ev) = item_ev {
-                    self.reach(owner_id.def_id, item_ev).generics().predicates();
+                    self.reach(def_id, item_ev).generics().predicates();
                 }
-                let def = self.tcx.adt_def(owner_id);
+                let def = self.tcx.adt_def(def_id);
                 for variant in def.variants() {
                     if let Some(item_ev) = item_ev {
                         self.update(variant.def_id.expect_local(), item_ev, Level::Reachable);
@@ -607,19 +624,19 @@ impl<'tcx> EmbargoVisitor<'tcx> {
                         }
                         // Corner case: if the variant is reachable, but its
                         // enum is not, make the enum reachable as well.
-                        self.reach(owner_id.def_id, variant_ev).ty();
+                        self.reach(def_id, variant_ev).ty();
                     }
                     if let Some(ctor_def_id) = variant.ctor_def_id() {
                         if let Some(ctor_ev) = self.get(ctor_def_id.expect_local()) {
-                            self.reach(owner_id.def_id, ctor_ev).ty();
+                            self.reach(def_id, ctor_ev).ty();
                         }
                     }
                 }
             }
             DefKind::Struct | DefKind::Union => {
-                let def = self.tcx.adt_def(owner_id).non_enum_variant();
+                let def = self.tcx.adt_def(def_id).non_enum_variant();
                 if let Some(item_ev) = item_ev {
-                    self.reach(owner_id.def_id, item_ev).generics().predicates();
+                    self.reach(def_id, item_ev).generics().predicates();
                     for field in &def.fields {
                         let field = field.did.expect_local();
                         self.update(field, item_ev, Level::Reachable);
@@ -633,7 +650,7 @@ impl<'tcx> EmbargoVisitor<'tcx> {
                         self.update(ctor_def_id.expect_local(), item_ev, Level::Reachable);
                     }
                     if let Some(ctor_ev) = self.get(ctor_def_id.expect_local()) {
-                        self.reach(owner_id.def_id, ctor_ev).ty();
+                        self.reach(def_id, ctor_ev).ty();
                     }
                 }
             }
@@ -653,7 +670,7 @@ impl<'tcx> EmbargoVisitor<'tcx> {
             | DefKind::ConstParam
             | DefKind::LifetimeParam
             | DefKind::Ctor(..) => {
-                bug!("should be checked while checking parent")
+                bug!("{:?} should be checked while checking parent", def_kind)
             }
         }
     }
@@ -695,6 +712,80 @@ impl ReachEverythingInTheInterfaceVisitor<'_, '_> {
         );
         self
     }
+
+    // If a def encountered in the interface is updated, we put those items
+    // that may be affected by this update into the queue.
+    fn try_append_item_in_queue(&mut self, def_id: LocalDefId) {
+        // Make sure that all affected impls are traversed one more time.
+        let check_impls = |ev: &mut EmbargoVisitor<'_>, def_id| {
+            if let Some(impls) = ev.type_to_impls.get(&def_id) {
+                // The order in which items are traversed is irrelevant.
+                #[allow(rustc::potential_query_instability)]
+                ev.queue.extend(impls.iter());
+            }
+        };
+
+        match self.ev.tcx.def_kind(def_id) {
+            DefKind::Enum
+            | DefKind::Union
+            | DefKind::Struct
+            | DefKind::ForeignTy
+            | DefKind::TyAlias
+            | DefKind::Trait
+            | DefKind::TraitAlias
+            | DefKind::Fn => {
+                self.ev.queue.insert(def_id);
+                check_impls(&mut self.ev, def_id)
+            }
+            DefKind::AssocConst { .. } | DefKind::AssocTy | DefKind::AssocFn => {
+                // FIXME: `EmbargoVisitor` can't traverse these defs(see `check_def_id`).
+                // Let's traverse the whole impl/trait.
+                self.ev.queue.insert(self.ev.tcx.local_parent(def_id));
+                check_impls(&mut self.ev, def_id);
+            }
+
+            DefKind::Ctor(ctor_of, _) => {
+                check_impls(&mut self.ev, def_id);
+                let update_id = match ctor_of {
+                    CtorOf::Struct => self.ev.tcx.local_parent(def_id),
+                    CtorOf::Variant => {
+                        let variant = self.ev.tcx.local_parent(def_id);
+                        self.ev.tcx.local_parent(variant)
+                    }
+                };
+                // Update the whole ADT.
+                self.ev.queue.insert(update_id);
+            }
+
+            // Can be reached via RPIT (impl Fn), but can't affect
+            // the effective visibility of other defs.
+            DefKind::Closure => {
+                check_impls(&mut self.ev, def_id);
+            }
+
+            // Can't be reached
+            DefKind::Impl { .. }
+            | DefKind::Field
+            | DefKind::Variant
+            | DefKind::Static { .. }
+            | DefKind::Macro(_)
+            | DefKind::TyParam
+            | DefKind::AnonConst
+            | DefKind::InlineConst
+            | DefKind::OpaqueTy
+            | DefKind::SyntheticCoroutineBody
+            | DefKind::ConstParam
+            | DefKind::LifetimeParam
+            | DefKind::Mod
+            | DefKind::Use
+            | DefKind::ExternCrate
+            | DefKind::GlobalAsm
+            | DefKind::ForeignMod
+            | DefKind::Const { .. } => {
+                unreachable!()
+            }
+        }
+    }
 }
 
 impl<'tcx> DefIdVisitor<'tcx> for ReachEverythingInTheInterfaceVisitor<'_, 'tcx> {
@@ -708,7 +799,9 @@ impl<'tcx> DefIdVisitor<'tcx> for ReachEverythingInTheInterfaceVisitor<'_, 'tcx>
             // produce type privacy errors on any use, so we don't consider it leaked.
             let max_vis = (self.level != Level::ReachableThroughImplTrait)
                 .then(|| self.ev.tcx.local_visibility(def_id));
-            self.ev.update_eff_vis(def_id, self.effective_vis, max_vis, self.level);
+            if self.ev.update_eff_vis(def_id, self.effective_vis, max_vis, self.level) {
+                self.try_append_item_in_queue(def_id);
+            }
         }
     }
 }
@@ -1522,8 +1615,13 @@ impl<'tcx> PrivateItemsInPublicInterfacesChecker<'_, 'tcx> {
             // A trait impl is public when both its type and its trait are public
             // Subitems of trait impls have inherited publicity.
             DefKind::Impl { of_trait } => {
-                let impl_vis =
-                    ty::Visibility::of_impl::<false>(def_id, of_trait, tcx, &Default::default());
+                let impl_vis = ty::Visibility::of_impl::<false>(
+                    def_id,
+                    of_trait,
+                    tcx,
+                    &Default::default(),
+                    &mut Default::default(),
+                );
 
                 // We are using the non-shallow version here, unlike when building the
                 // effective visisibilities table to avoid large number of false positives.
@@ -1541,6 +1639,7 @@ impl<'tcx> PrivateItemsInPublicInterfacesChecker<'_, 'tcx> {
                     of_trait,
                     tcx,
                     self.effective_visibilities,
+                    &mut Default::default(),
                 );
 
                 let mut check = self.check(def_id, impl_vis, Some(impl_ev));
@@ -1639,7 +1738,8 @@ fn effective_visibilities(tcx: TyCtxt<'_>, (): ()) -> &EffectiveVisibilities {
     let mut visitor = EmbargoVisitor {
         tcx,
         effective_visibilities: tcx.resolutions(()).effective_visibilities.clone(),
-        changed: false,
+        queue: Default::default(),
+        type_to_impls: Default::default(),
     };
 
     visitor.effective_visibilities.check_invariants(tcx);
@@ -1691,8 +1791,6 @@ fn effective_visibilities(tcx: TyCtxt<'_>, (): ()) -> &EffectiveVisibilities {
                     .ty();
             }
         }
-
-        visitor.changed = false;
     }
 
     // FIXME: remove this once proper support for defs reachability from macros is implemented.
@@ -1716,18 +1814,14 @@ fn effective_visibilities(tcx: TyCtxt<'_>, (): ()) -> &EffectiveVisibilities {
     }
 
     let crate_items = tcx.hir_crate_items(());
-    loop {
-        for id in crate_items.free_items() {
-            visitor.check_def_id(id.owner_id);
-        }
-        for id in crate_items.foreign_items() {
-            visitor.check_def_id(id.owner_id);
-        }
-        if visitor.changed {
-            visitor.changed = false;
-        } else {
-            break;
-        }
+    for id in crate_items.free_items() {
+        visitor.check_def_id(id.owner_id.def_id);
+    }
+    for id in crate_items.foreign_items() {
+        visitor.check_def_id(id.owner_id.def_id);
+    }
+    while let Some(def_id) = visitor.queue.pop() {
+        visitor.check_def_id(def_id);
     }
     visitor.effective_visibilities.check_invariants(tcx);
 
