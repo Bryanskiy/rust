@@ -689,13 +689,8 @@ impl<'tcx> EmbargoVisitor<'tcx> {
             DefKind::Use | DefKind::ExternCrate | DefKind::GlobalAsm => {}
             // The interface is empty, and all nested items are processed by `check_def_id`.
             DefKind::Mod => {}
-            DefKind::Macro { .. } => {
-                if let Some(item_ev) = item_ev {
-                    let (_, macro_def, _) =
-                        self.tcx.hir_expect_item(owner_id.def_id).expect_macro();
-                    self.update_reachability_from_macro(owner_id.def_id, macro_def, item_ev);
-                }
-            }
+            // Macros have been already processed.
+            DefKind::Macro { .. } => {}
             DefKind::ForeignTy
             | DefKind::Const { .. }
             | DefKind::Static { .. }
@@ -1873,6 +1868,22 @@ fn effective_visibilities(tcx: TyCtxt<'_>, (): ()) -> &EffectiveVisibilities {
     }
 
     let crate_items = tcx.hir_crate_items(());
+    loop {
+        for id in crate_items.free_items() {
+            let def_id = id.owner_id.def_id;
+            if let hir::ItemKind::Macro(_, macro_def, _) = tcx.hir_expect_item(def_id).kind
+                && let Some(item_ev) = visitor.effective_visibilities.effective_vis(def_id)
+            {
+                visitor.update_reachability_from_macro(def_id, macro_def, *item_ev);
+            }
+        }
+        if visitor.changed {
+            visitor.changed = false;
+        } else {
+            break;
+        }
+    }
+
     loop {
         for id in crate_items.free_items() {
             visitor.check_def_id(id.owner_id);
