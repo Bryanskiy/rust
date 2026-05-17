@@ -1,7 +1,7 @@
 // Test case from issue #151284.
-// A private associated type bound allows to leak another private type and result in missing MIR.
+// Make sure that private types indirectly leaked through RPIT don't result in missing MIR.
 
-//@ build-fail
+//@ check-pass
 //@ aux-crate:dep=missing-mir-priv-bounds-extern.rs
 
 extern crate dep;
@@ -22,5 +22,3 @@ trait Access: PubTr {
 impl<T: PubTr> Access for T {
     type AccessAssoc = <<T::Assoc as ToPriv>::AssocPriv as GetUnreachable>::Assoc;
 }
-
-//~? ERROR missing optimized MIR

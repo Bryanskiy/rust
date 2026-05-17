@@ -6,8 +6,8 @@ struct SemiPriv;
 mod m {
     #[rustc_effective_visibility]
     struct Priv;
-    //~^ ERROR not in the table
-    //~| ERROR not in the table
+    //~^ ERROR Direct: pub(self), Reexported: pub(self), Reachable: pub(self), ReachableThroughImplTrait: pub(self)
+    //~| ERROR Direct: pub(self), Reexported: pub(self), Reachable: pub(self), ReachableThroughImplTrait: pub(self)
 
     #[rustc_effective_visibility]
     pub fn foo() {} //~ ERROR Direct: pub(crate), Reexported: pub(crate), Reachable: pub(crate), ReachableThroughImplTrait: pub(crate)

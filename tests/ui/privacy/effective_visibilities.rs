@@ -24,7 +24,7 @@ mod outer { //~ ERROR Direct: pub(crate), Reexported: pub(crate), Reachable: pub
         #[rustc_effective_visibility]
         pub union PubUnion { //~ ERROR Direct: pub(crate), Reexported: pub, Reachable: pub, ReachableThroughImplTrait: pub
             #[rustc_effective_visibility]
-            a: u8, //~ ERROR not in the table
+            a: u8, //~ ERROR: Direct: pub(self), Reexported: pub(self), Reachable: pub(self), ReachableThroughImplTrait: pub(self)
             #[rustc_effective_visibility]
             pub b: u8, //~ ERROR Direct: pub(crate), Reexported: pub, Reachable: pub, ReachableThroughImplTrait: pub
         }

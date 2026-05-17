@@ -249,10 +249,15 @@ impl<Id: Eq + Hash> EffectiveVisibilities<Id> {
                 {
                     // FIXME: figure out why unordered visibilities occur here,
                     // and what the behavior for them should be.
-                    calculated_effective_vis = if let Some(max_vis) = max_vis
+                    calculated_effective_vis = if l == Level::ReachableThroughImplTrait {
+                        inherited_effective_vis_at_level
+                    } else if let Some(max_vis) = max_vis
                         && inherited_effective_vis_at_level.partial_cmp(max_vis, tcx)
                             == Some(Ordering::Greater)
                     {
+                        // All effective visibilities except `reachable_through_impl_trait` are limited to
+                        // nominal visibility. If any type or trait is leaked farther than that, it will
+                        // produce type privacy errors on any use, so we don't consider it leaked.
                         max_vis
                     } else {
                         inherited_effective_vis_at_level

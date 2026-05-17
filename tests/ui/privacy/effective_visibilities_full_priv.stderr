@@ -1,10 +1,10 @@
-error: not in the table
+error: Direct: pub(self), Reexported: pub(self), Reachable: pub(self), ReachableThroughImplTrait: pub(self)
   --> $DIR/effective_visibilities_full_priv.rs:8:5
    |
 LL |     struct Priv;
    |     ^^^^^^^^^^^
 
-error: not in the table
+error: Direct: pub(self), Reexported: pub(self), Reachable: pub(self), ReachableThroughImplTrait: pub(self)
   --> $DIR/effective_visibilities_full_priv.rs:8:5
    |
 LL |     struct Priv;

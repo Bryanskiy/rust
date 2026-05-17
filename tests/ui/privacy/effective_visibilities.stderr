@@ -53,7 +53,7 @@ error: Direct: pub(crate), Reexported: pub, Reachable: pub, ReachableThroughImpl
 LL |         pub union PubUnion {
    |         ^^^^^^^^^^^^^^^^^^
 
-error: not in the table
+error: Direct: pub(self), Reexported: pub(self), Reachable: pub(self), ReachableThroughImplTrait: pub(self)
   --> $DIR/effective_visibilities.rs:27:13
    |
 LL |             a: u8,
