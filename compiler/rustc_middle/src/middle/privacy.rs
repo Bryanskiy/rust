@@ -95,6 +95,53 @@ impl EffectiveVisibility {
         }
         self
     }
+
+    pub fn update(
+        &mut self,
+        max_vis: Option<Visibility>,
+        inherited_effective_vis: EffectiveVisibility,
+        level: Level,
+        tcx: TyCtxt<'_>,
+    ) -> bool {
+        let mut changed = false;
+        let mut inherited_effective_vis_at_prev_level = *inherited_effective_vis.at_level(level);
+        let mut calculated_effective_vis = inherited_effective_vis_at_prev_level;
+        for l in Level::all_levels() {
+            if level >= l {
+                let inherited_effective_vis_at_level = *inherited_effective_vis.at_level(l);
+                let current_effective_vis_at_level = self.at_level_mut(l);
+                // effective visibility for id shouldn't be recalculated if
+                // inherited from parent_id effective visibility isn't changed at next level
+                if !(inherited_effective_vis_at_prev_level == inherited_effective_vis_at_level
+                    && level != l)
+                {
+                    // FIXME: figure out why unordered visibilities occur here,
+                    // and what the behavior for them should be.
+                    calculated_effective_vis = if let Some(max_vis) = max_vis
+                        && inherited_effective_vis_at_level.partial_cmp(max_vis, tcx)
+                            == Some(Ordering::Greater)
+                    {
+                        max_vis
+                    } else {
+                        inherited_effective_vis_at_level
+                    }
+                }
+                // effective visibility can't be decreased at next update call for the
+                // same id
+                // FIXME: figure out why unordered visibilities occur here,
+                // and what the behavior for them should be.
+                if calculated_effective_vis.partial_cmp(*current_effective_vis_at_level, tcx)
+                    == Some(Ordering::Greater)
+                {
+                    changed = true;
+                    *current_effective_vis_at_level = calculated_effective_vis;
+                }
+                inherited_effective_vis_at_prev_level = inherited_effective_vis_at_level;
+            }
+        }
+
+        changed
+    }
 }
 
 /// Holds a map of effective visibilities for reachable HIR nodes.
@@ -233,46 +280,8 @@ impl<Id: Eq + Hash> EffectiveVisibilities<Id> {
         level: Level,
         tcx: TyCtxt<'_>,
     ) -> bool {
-        let mut changed = false;
         let current_effective_vis = self.effective_vis_or_private(id, || private_vis);
-
-        let mut inherited_effective_vis_at_prev_level = *inherited_effective_vis.at_level(level);
-        let mut calculated_effective_vis = inherited_effective_vis_at_prev_level;
-        for l in Level::all_levels() {
-            if level >= l {
-                let inherited_effective_vis_at_level = *inherited_effective_vis.at_level(l);
-                let current_effective_vis_at_level = current_effective_vis.at_level_mut(l);
-                // effective visibility for id shouldn't be recalculated if
-                // inherited from parent_id effective visibility isn't changed at next level
-                if !(inherited_effective_vis_at_prev_level == inherited_effective_vis_at_level
-                    && level != l)
-                {
-                    // FIXME: figure out why unordered visibilities occur here,
-                    // and what the behavior for them should be.
-                    calculated_effective_vis = if let Some(max_vis) = max_vis
-                        && inherited_effective_vis_at_level.partial_cmp(max_vis, tcx)
-                            == Some(Ordering::Greater)
-                    {
-                        max_vis
-                    } else {
-                        inherited_effective_vis_at_level
-                    }
-                }
-                // effective visibility can't be decreased at next update call for the
-                // same id
-                // FIXME: figure out why unordered visibilities occur here,
-                // and what the behavior for them should be.
-                if calculated_effective_vis.partial_cmp(*current_effective_vis_at_level, tcx)
-                    == Some(Ordering::Greater)
-                {
-                    changed = true;
-                    *current_effective_vis_at_level = calculated_effective_vis;
-                }
-                inherited_effective_vis_at_prev_level = inherited_effective_vis_at_level;
-            }
-        }
-
-        changed
+        current_effective_vis.update(max_vis, inherited_effective_vis, level, tcx)
     }
 }
 

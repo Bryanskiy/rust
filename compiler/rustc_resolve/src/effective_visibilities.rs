@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use std::mem;
 
 use rustc_ast::visit::Visitor;
@@ -227,21 +229,19 @@ impl<'a, 'ra, 'tcx> EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
         self.update_def(def_id, nominal_vis, ParentId::Def(parent_id), self.current_private_vis);
     }
 
-    fn update_macro(&mut self, def_id: LocalDefId, inherited_effective_vis: EffectiveVisibility) {
-        let max_vis = Some(self.r.tcx.local_visibility(def_id));
+    fn update_macro(
+        item_ev: &mut EffectiveVisibility,
+        def_id: LocalDefId,
+        macro_ev: EffectiveVisibility,
+        max_vis: Visibility,
+    ) -> bool {
+        // let max_vis = Some(self.r.tcx.local_visibility(def_id));
         let priv_vis = if def_id == CRATE_DEF_ID {
             Visibility::Restricted(CRATE_DEF_ID)
         } else {
             self.r.private_vis_def(def_id)
         };
-        self.changed |= self.def_effective_visibilities.update(
-            def_id,
-            max_vis,
-            priv_vis,
-            inherited_effective_vis,
-            Level::Reachable,
-            self.r.tcx,
-        );
+        item_ev.update(def_id, max_vis, priv_vis, macro_ev, Level::Reachable, self.r.tcx)
     }
 
     // We have to make sure that the items that macros might reference
@@ -265,25 +265,30 @@ impl<'a, 'ra, 'tcx> EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
             return;
         }
 
-        let Some(macro_ev) = self
-            .def_effective_visibilities
-            .effective_vis(local_def_id)
-            .filter(|ev| ev.public_at_level().is_some())
-            .copied()
+        let Some(macro_ev) = self.def_effective_visibilities.effective_vis(local_def_id).copied()
         else {
             return;
         };
 
-        // Since we are starting from an externally visible module,
-        // all the parents in the loop below are also guaranteed to be modules.
-        let mut module_def_id = macro_module_def_id;
-        loop {
-            let changed_reachability =
-                self.update_macro_reachable(module_def_id, macro_module_def_id, macro_ev);
-            if changed_reachability || module_def_id == CRATE_DEF_ID {
-                break;
+        // // Since we are starting from an externally visible module,
+        // // all the parents in the loop below are also guaranteed to be modules.
+        // let mut module_def_id = macro_module_def_id;
+        // loop {
+        //     let changed_reachability =
+        //         self.update_macro_reachable(module_def_id, macro_module_def_id, macro_ev);
+        //     if changed_reachability || module_def_id == CRATE_DEF_ID {
+        //         break;
+        //     }
+        //     module_def_id = self.r.tcx.local_parent(module_def_id);
+        // }
+
+        for (item_id, item_ev) in self.def_effective_visibilities.iter() {
+            if item_ev
+                .at_level(Level::Reachable)
+                .is_accessible_from(macro_module_def_id, self.r.tcx)
+            {
+                self.update_macro(*item_id, macro_ev);
             }
-            module_def_id = self.r.tcx.local_parent(module_def_id);
         }
     }
 
