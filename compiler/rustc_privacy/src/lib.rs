@@ -687,7 +687,8 @@ impl<'tcx> EmbargoVisitor<'tcx> {
                     self.reach(def_id, item_ev).generics().predicates();
                     for field in &def.fields {
                         let field = field.did.expect_local();
-                        self.update(field, item_ev, Level::Reachable);
+                        self.update_eff_vis(field, item_ev, None, Level::Reachable);
+                        // self.update(field, item_ev, Level::Reachable);
                         if let Some(field_ev) = self.get(field) {
                             self.reach(field, field_ev).ty();
                         }
@@ -1836,26 +1837,6 @@ fn effective_visibilities(tcx: TyCtxt<'_>, (): ()) -> &EffectiveVisibilities {
         }
 
         visitor.queue.clear();
-    }
-
-    // FIXME: remove this once proper support for defs reachability from macros is implemented.
-    // See `ResolverGlobalCtxt::macro_reachable_adts` comment.
-    for (&adt_def_id, macro_mods) in &tcx.resolutions(()).macro_reachable_adts {
-        let struct_def = tcx.adt_def(adt_def_id);
-        let Some(struct_ev) = visitor.effective_visibilities.effective_vis(adt_def_id).copied()
-        else {
-            continue;
-        };
-        for field in &struct_def.non_enum_variant().fields {
-            let def_id = field.did.expect_local();
-            let field_vis = tcx.local_visibility(def_id);
-
-            for &macro_mod in macro_mods {
-                if field_vis.is_accessible_from(macro_mod, tcx) {
-                    visitor.reach(def_id, struct_ev).ty();
-                }
-            }
-        }
     }
 
     let crate_items = tcx.hir_crate_items(());

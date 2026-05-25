@@ -8,6 +8,7 @@ use rustc_data_structures::fx::FxHashSet;
 use rustc_hir::def::{DefKind, Res};
 use rustc_hir::def_id::{CRATE_DEF_ID, LocalDefId};
 use rustc_middle::middle::privacy::{EffectiveVisibilities, EffectiveVisibility, Level};
+use rustc_middle::bug;
 use rustc_middle::ty::Visibility;
 use rustc_span::sym;
 use tracing::info;
@@ -229,20 +230,20 @@ impl<'a, 'ra, 'tcx> EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
         self.update_def(def_id, nominal_vis, ParentId::Def(parent_id), self.current_private_vis);
     }
 
-    fn update_macro(
-        item_ev: &mut EffectiveVisibility,
-        def_id: LocalDefId,
-        macro_ev: EffectiveVisibility,
-        max_vis: Visibility,
-    ) -> bool {
-        // let max_vis = Some(self.r.tcx.local_visibility(def_id));
-        let priv_vis = if def_id == CRATE_DEF_ID {
-            Visibility::Restricted(CRATE_DEF_ID)
-        } else {
-            self.r.private_vis_def(def_id)
-        };
-        item_ev.update(def_id, max_vis, priv_vis, macro_ev, Level::Reachable, self.r.tcx)
-    }
+    // fn update_macro(
+    //     item_ev: &mut EffectiveVisibility,
+    //     def_id: LocalDefId,
+    //     macro_ev: EffectiveVisibility,
+    //     max_vis: Visibility,
+    // ) -> bool {
+    //     // let max_vis = Some(self.r.tcx.local_visibility(def_id));
+    //     let priv_vis = if def_id == CRATE_DEF_ID {
+    //         Visibility::Restricted(CRATE_DEF_ID)
+    //     } else {
+    //         self.r.private_vis_def(def_id)
+    //     };
+    //     item_ev.update(def_id, max_vis, priv_vis, macro_ev, Level::Reachable, self.r.tcx)
+    // }
 
     // We have to make sure that the items that macros might reference
     // are reachable, since they might be exported transitively.
@@ -265,10 +266,14 @@ impl<'a, 'ra, 'tcx> EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
             return;
         }
 
+        // println!("macro_module_def_id: {:?}", macro_module_def_id);
+
         let Some(macro_ev) = self.def_effective_visibilities.effective_vis(local_def_id).copied()
         else {
             return;
         };
+
+        // println!("macro_ev: {:?}", macro_ev);
 
         // // Since we are starting from an externally visible module,
         // // all the parents in the loop below are also guaranteed to be modules.
@@ -282,72 +287,123 @@ impl<'a, 'ra, 'tcx> EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
         //     module_def_id = self.r.tcx.local_parent(module_def_id);
         // }
 
-        for (item_id, item_ev) in self.def_effective_visibilities.iter() {
+        for (&item_id, item_ev) in self.def_effective_visibilities.iter_mut() {
+            // println!("try macro reachable span: {:?}", self.r.def_span(item_id.to_def_id()));
+            // println!("item ev: {:?}", item_ev);
             if item_ev
                 .at_level(Level::Reachable)
                 .is_accessible_from(macro_module_def_id, self.r.tcx)
             {
-                self.update_macro(*item_id, macro_ev);
-            }
-        }
-    }
 
-    /// Updates the item as being reachable through a macro defined in the given
-    /// module. Returns `true` if the level has changed.
-    fn update_macro_reachable(
-        &mut self,
-        module_def_id: LocalDefId,
-        defining_mod: LocalDefId,
-        macro_ev: EffectiveVisibility,
-    ) -> bool {
-        if self.macro_reachable.insert((module_def_id, defining_mod)) {
-            let module = self.r.expect_module(module_def_id.to_def_id());
-            for (_, name_resolution) in self.r.resolutions(module).borrow().iter() {
-                let Some(decl) = name_resolution.borrow().best_decl() else {
-                    continue;
-                };
+                // if matches!(self.r.tcx.def_kind(item_id), DefKind::Mod | DefKind::Struct | DefKind::Union | DefKind::Trait )
 
-                if let Res::Def(def_kind, def_id) = decl.res()
-                    && let Some(def_id) = def_id.as_local()
-                    // FIXME: defs should be checked with `EffectiveVisibilities::is_reachable`.
-                    && decl.vis().is_accessible_from(defining_mod, self.r.tcx)
-                {
-                    let vis = self.r.tcx.local_visibility(def_id);
-                    self.update_macro_reachable_def(def_id, def_kind, vis, defining_mod, macro_ev);
+                let def_kind = self.r.tcx.def_kind(item_id);
+                match def_kind {
+                    // update
+                    DefKind::Mod
+                    | DefKind::Struct
+                    | DefKind::Union
+                    | DefKind::Enum
+                    | DefKind::Trait
+                    | DefKind::TyAlias
+                    | DefKind::ForeignTy
+                    | DefKind::TraitAlias
+                    | DefKind::Fn
+                    | DefKind::Static { .. }
+                    | DefKind::Macro(..)
+                    | DefKind::Const { .. }
+                    | DefKind::Use => {
+                        // println!("macro reachable span: {:?}", self.r.def_span(item_id.to_def_id()));
+                        let max_vis = Some(self.r.tcx.local_visibility(item_id));
+                        self.changed |= item_ev.update(max_vis, macro_ev, Level::Reachable, self.r.tcx);
+                    }
+
+                    // don't update
+                    DefKind::AssocFn
+                    | DefKind::AssocConst { .. }
+                    | DefKind::AssocTy
+                    | DefKind::Variant
+                    | DefKind::Field
+                    | DefKind::Ctor(..) => {}
+
+                    // can't reach
+                    DefKind::TyParam
+                    | DefKind::ConstParam
+                    | DefKind::ExternCrate
+                    | DefKind::ForeignMod
+                    | DefKind::AnonConst
+                    | DefKind::InlineConst
+                    | DefKind::OpaqueTy
+                    | DefKind::LifetimeParam
+                    | DefKind::GlobalAsm
+                    | DefKind::Impl { .. }
+                    | DefKind::Closure
+                    | DefKind::SyntheticCoroutineBody => {
+                        bug!("{def_kind:?} shouldn't be marked as macro reachable");
+                    },
                 }
+
+                // self.update_macro(*item_id, macro_ev);
             }
-            true
-        } else {
-            false
         }
     }
 
-    fn update_macro_reachable_def(
-        &mut self,
-        def_id: LocalDefId,
-        def_kind: DefKind,
-        vis: Visibility,
-        module: LocalDefId,
-        macro_ev: EffectiveVisibility,
-    ) {
-        self.update_macro(def_id, macro_ev);
+    // Updates the item as being reachable through a macro defined in the given
+    // module. Returns `true` if the level has changed.
+    // fn update_macro_reachable(
+    //     &mut self,
+    //     module_def_id: LocalDefId,
+    //     defining_mod: LocalDefId,
+    //     macro_ev: EffectiveVisibility,
+    // ) -> bool {
+    //     if self.macro_reachable.insert((module_def_id, defining_mod)) {
+    //         let module = self.r.expect_module(module_def_id.to_def_id());
+    //         for (_, name_resolution) in self.r.resolutions(module).borrow().iter() {
+    //             let Some(decl) = name_resolution.borrow().best_decl() else {
+    //                 continue;
+    //             };
 
-        match def_kind {
-            DefKind::Mod => {
-                if vis.is_accessible_from(module, self.r.tcx) {
-                    self.update_macro_reachable(def_id, module, macro_ev);
-                }
-            }
-            DefKind::Struct | DefKind::Union => {
-                self.r
-                    .macro_reachable_adts
-                    .entry(def_id)
-                    .or_insert_with(Default::default)
-                    .insert(module);
-            }
-            _ => {}
-        }
-    }
+    //             if let Res::Def(def_kind, def_id) = decl.res()
+    //                 && let Some(def_id) = def_id.as_local()
+    //                 // FIXME: defs should be checked with `EffectiveVisibilities::is_reachable`.
+    //                 && decl.vis().is_accessible_from(defining_mod, self.r.tcx)
+    //             {
+    //                 let vis = self.r.tcx.local_visibility(def_id);
+    //                 self.update_macro_reachable_def(def_id, def_kind, vis, defining_mod, macro_ev);
+    //             }
+    //         }
+    //         true
+    //     } else {
+    //         false
+    //     }
+    // }
+
+    // fn update_macro_reachable_def(
+    //     &mut self,
+    //     def_id: LocalDefId,
+    //     def_kind: DefKind,
+    //     vis: Visibility,
+    //     module: LocalDefId,
+    //     macro_ev: EffectiveVisibility,
+    // ) {
+    //     self.update_macro(def_id, macro_ev);
+
+    //     match def_kind {
+    //         DefKind::Mod => {
+    //             if vis.is_accessible_from(module, self.r.tcx) {
+    //                 self.update_macro_reachable(def_id, module, macro_ev);
+    //             }
+    //         }
+    //         DefKind::Struct | DefKind::Union => {
+    //             self.r
+    //                 .macro_reachable_adts
+    //                 .entry(def_id)
+    //                 .or_insert_with(Default::default)
+    //                 .insert(module);
+    //         }
+    //         _ => {}
+    //     }
+    // }
 }
 
 impl<'a, 'ra, 'tcx> Visitor<'a> for EffectiveVisibilitiesVisitor<'a, 'ra, 'tcx> {
