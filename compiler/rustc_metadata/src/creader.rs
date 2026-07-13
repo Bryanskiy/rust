@@ -797,7 +797,12 @@ impl CStore {
         let hash = dep.map(|d| d.hash);
         let host_hash = dep.map(|d| d.host_hash).flatten();
         let extra_filename = dep.map(|d| &d.extra_filename[..]);
-        let path_kind = if dep.is_some() { PathKind::Dependency } else { PathKind::Crate };
+
+        let path_kind = if dep.is_some() || matches!(origin, CrateOrigin::Injected) {
+            PathKind::Dependency
+        } else {
+            PathKind::Crate
+        };
         let private_dep = origin.private_dep();
 
         let result = if let Some(cnum) = self.existing_match(name, hash) {
