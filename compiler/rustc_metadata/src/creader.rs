@@ -799,6 +799,7 @@ impl CStore {
         let extra_filename = dep.map(|d| &d.extra_filename[..]);
         let path_kind = if dep.is_some() { PathKind::Dependency } else { PathKind::Crate };
         let private_dep = origin.private_dep();
+        let inject_panic_runtime = matches!(origin, CrateOrigin::Injected);
 
         let result = if let Some(cnum) = self.existing_match(name, hash) {
             (LoadResult::Previous(cnum), None)
@@ -814,6 +815,7 @@ impl CStore {
                 hash,
                 extra_filename,
                 path_kind,
+                inject_panic_runtime,
             );
             let mut crate_rejections = CrateRejections::default();
 

@@ -20,5 +20,5 @@ fn main() {
         // find the Windows SDK.
         .env("LIB", std::env::var("LIB").unwrap_or_default())
         .run_fail()
-        .assert_stderr_contains("duplicate lang item in crate `core`: `sized`");
+        .assert_stderr_contains("multiple candidates for `rlib` dependency `panic_abort` found");
 }

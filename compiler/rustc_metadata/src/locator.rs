@@ -255,6 +255,7 @@ pub(crate) struct CrateLocator<'a> {
     filesearch: &'a FileSearch,
     is_proc_macro: bool,
     path_kind: PathKind,
+    inject_panic_runtime: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -308,6 +309,7 @@ impl<'a> CrateLocator<'a> {
         hash: Option<Svh>,
         extra_filename: Option<&'a str>,
         path_kind: PathKind,
+        inject_panic_runtime: bool,
     ) -> CrateLocator<'a> {
         let needs_object_code = sess.opts.output_types.should_codegen();
         // If we're producing an rlib, then we don't need object code.
@@ -341,6 +343,7 @@ impl<'a> CrateLocator<'a> {
             filesearch: sess.target_filesearch(),
             path_kind,
             is_proc_macro: false,
+            inject_panic_runtime,
         }
     }
 
@@ -422,7 +425,11 @@ impl<'a> CrateLocator<'a> {
         // given that `extra_filename` comes from the `-C extra-filename`
         // option and thus can be anything, and the incorrect match will be
         // handled safely in `extract_one`.
-        for search_path in self.filesearch.search_paths(self.path_kind) {
+        let mut search_paths = self.filesearch.search_paths(self.path_kind).collect::<Vec<_>>();
+        if self.inject_panic_runtime {
+            search_paths.extend(self.filesearch.cli_search_paths(PathKind::Dependency));
+        }
+        for search_path in search_paths {
             debug!("searching {}", search_path.dir.display());
             let spf = &search_path.files;
 
