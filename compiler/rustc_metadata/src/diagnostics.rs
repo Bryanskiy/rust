@@ -177,13 +177,6 @@ pub(crate) struct CrateNotCompilerBuiltins {
 }
 
 #[derive(Diagnostic)]
-#[diag("the crate `{$crate_name}` does not have the panic strategy `{$strategy}`")]
-pub(crate) struct NoPanicStrategy {
-    pub crate_name: Symbol,
-    pub strategy: PanicStrategy,
-}
-
-#[derive(Diagnostic)]
 #[diag("the crate `{$crate_name}` is not a profiler runtime")]
 pub(crate) struct NotProfilerRuntime {
     pub crate_name: Symbol,
